@@ -1,0 +1,23 @@
+[project]
+name = "afterword"
+version = "0.1.0"
+description = "Free, local-first AI notes for meetings and job interviews: record, transcribe, summarize."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.70",
+]
+
+[project.scripts]
+afterword = "afterword.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

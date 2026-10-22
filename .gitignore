@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+.pytest_cache/
+
+# Swift
+macos/afterword-capture/.build/
+.swiftpm/
+
+# Never commit recordings, transcripts or notes, even if a session folder ends up here.
+*.m4a
+*.wav
+*.mp3
+session.json
+transcript.md
+summary.md
+config.toml
+
+.DS_Store
