@@ -66,8 +66,9 @@ says no, `--mic-only` still captures your side.
 
 ### Tips
 
-- **Wear headphones.** Otherwise your mic also picks up the other people, and their words
-  show up twice: once as them and once as you.
+- **Headphones are optional.** Without them your mic also hears the call through your
+  speakers. Afterword compares your track with the clean call track and removes their words
+  from yours (`src/afterword/echo.py`). Headphones still give the cleanest transcript.
 - Everyone on the call side shares one "Them" track. The summarizer separates panel
   interviewers from context and the names you pass with `--with`.
 
@@ -129,6 +130,7 @@ The pieces, in the order a recording flows through them:
 - `macos/afterword-capture/`: Swift helper that records the mic and system audio (Core Audio process taps) to separate files
 - `src/afterword/capture/`: runs the platform's recorder
 - `src/afterword/transcribe.py`: whisper.cpp, one track at a time, with voice activity detection
+- `src/afterword/echo.py`: removes the call's voice from your mic track when you use speakers
 - `src/afterword/transcript.py`: merges tracks into one speaker-labeled transcript
 - `src/afterword/summarize/`: the prompt and the three providers
 - `src/afterword/note.py`, `exporters/`: the markdown note and optional destinations

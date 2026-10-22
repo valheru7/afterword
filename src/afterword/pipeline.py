@@ -9,6 +9,7 @@ import subprocess
 from dataclasses import asdict
 
 from afterword.config import Config
+from afterword.echo import remove_echo
 from afterword.exporters import EXPORTERS
 from afterword.note import Note, build_note, write_note
 from afterword.session import Session, Track
@@ -59,10 +60,10 @@ def process_session(session: Session, config: Config) -> Note:
 
 
 def transcribe_session(session: Session, config: Config) -> str:
-    tracks: list[list[Segment]] = []
-    for track in session.tracks:
-        tracks.append(transcribe_track_cached(session, track, config))
-    transcript = format_transcript(merge_tracks(tracks))
+    segments_by_speaker = {track.speaker: transcribe_track_cached(session, track, config) for track in session.tracks}
+    if "Me" in segments_by_speaker and "Them" in segments_by_speaker:
+        segments_by_speaker["Me"] = remove_echo(segments_by_speaker["Me"], segments_by_speaker["Them"])
+    transcript = format_transcript(merge_tracks(list(segments_by_speaker.values())))
     (session.directory / TRANSCRIPT_FILE).write_text(transcript + "\n")
     return transcript
 
