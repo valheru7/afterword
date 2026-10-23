@@ -15,6 +15,9 @@ read these notes. "Them" is everyone else, all on one track, so tell people apar
 context when you can. If every line is labeled "Speaker", the recording wasn't split \
 by speaker; work out who is who from context.
 
+Write the notes to "Me" as "you" throughout ("you said", "your answer"), never as "the \
+candidate" or "the user".
+
 Only write what the conversation supports. Never invent names, numbers, dates or \
 commitments. If something important was unclear or inaudible, say so briefly.
 
