@@ -3,7 +3,7 @@ name = "afterword"
 version = "0.1.0"
 description = "Free, local-first AI notes for meetings and job interviews: record, transcribe, summarize."
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.70",

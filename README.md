@@ -140,4 +140,4 @@ New exporters (Obsidian vault, Notion, …) and recorders for Linux and Windows 
 
 ## License
 
-MIT
+Copyright (c) 2026 Jerica Wilson. Licensed under GPL-3.0-or-later. You can use, change and share Afterword freely, but anything you distribute that builds on it must stay open source under the same license.
