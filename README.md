@@ -16,6 +16,25 @@ on Zoom, Google Meet, Microsoft Teams or anything else that plays through your s
 - **Me vs. them.** Your microphone and the call audio are recorded on separate tracks, so
   the transcript knows which words are yours without any guesswork.
 
+## What you get
+
+Here's part of the note from a short, made-up hiring manager interview. The
+[full example note](docs/example-note.md) also has the role details, next steps, a
+thank-you draft and the transcript.
+
+> **How the answers landed**
+>
+> - **Your intro worked well.** It was short and concrete, and it had a clear
+>   before-and-after ("seconds instead of the next morning"). When she asked about scale you
+>   answered with real numbers right away. Keep this version.
+> - **The production incident answer was the weakest part of the call.** It started with
+>   filler ("Um, so, yeah, there was one time, I think..."), had no specifics, and moved the
+>   credit and ownership away from you ("kind of a team thing, I don't remember all the
+>   details honestly"). [...]
+> - **The root cause answer was solid, but it came too late.** "A consumer was stuck on a bad
+>   message, so we added a dead letter queue" is a good, clear answer. Lead with it next time
+>   so she doesn't have to pull it out of you.
+
 ## Platform support
 
 | | Recording | Transcription & notes |
