@@ -77,6 +77,7 @@ says no, `--mic-only` still captures your side.
 | Template | For |
 |---|---|
 | `job-interview` | You're the candidate: people, questions asked, honest feedback on your answers, role details, next steps, and a thank-you draft. |
+| `interview-recap` | For interviews you couldn't record. Talk through how it went in a voice memo right afterwards, then `afterword import memo.m4a --template interview-recap`. Same notes as `job-interview`, from your memory. |
 | `meeting` | Summary, decisions, action items with owners, open questions. |
 | `one-on-one` | Updates, feedback, career topics, follow-ups. |
 
