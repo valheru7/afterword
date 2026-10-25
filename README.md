@@ -48,8 +48,11 @@ can record the call some other way and run `afterword import recording.m4a`.
 
 ## Install (macOS)
 
+You need macOS 14.4 or newer, [Homebrew](https://brew.sh), and Xcode 26 or its command line
+tools (`xcode-select --install`) to build the small recorder program.
+
 ```sh
-brew install whisper-cpp ffmpeg
+brew install whisper.cpp ffmpeg uv
 git clone https://github.com/valheru7/afterword.git
 cd afterword
 swift build -c release --package-path macos/afterword-capture
