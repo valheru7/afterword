@@ -36,7 +36,7 @@ commands:
 options:
   --title TITLE      e.g. "Acme – hiring manager"
   --with NAME        someone on the call (repeat for each person)
-  --template NAME    note template (default: {default_template}, from your config)
+  --template NAME    note template: {template_names}
   --mic-only         record: only your microphone (if someone declines recording)
   --no-process       record: just record; run `afterword process` later
 
@@ -47,21 +47,22 @@ options:
 class OverviewHelp(argparse.Action):
     """`afterword --help`: one short page covering every command, with each option listed once."""
 
-    def __init__(self, option_strings, dest, default_template: str, **kwargs):
+    def __init__(self, option_strings, dest, template_names: str, **kwargs):
         super().__init__(option_strings, dest, nargs=0, help="show this help and exit", **kwargs)
-        self.default_template = default_template
+        self.template_names = template_names
 
     def __call__(self, parser, namespace, values, option_string=None):
-        print(OVERVIEW.format(default_template=self.default_template), end="")
+        print(OVERVIEW.format(template_names=self.template_names), end="")
         parser.exit()
 
 
 def main() -> None:
     config = load_config()
-    template_help = f"note template (default: {config.template}, from your config; see `afterword templates`)"
+    template_names = describe_template_names(config.template)
+    template_help = f"note template: {template_names}"
 
     parser = argparse.ArgumentParser(prog="afterword", usage="afterword <command> [options]", add_help=False)
-    parser.add_argument("-h", "--help", action=OverviewHelp, default_template=config.template)
+    parser.add_argument("-h", "--help", action=OverviewHelp, template_names=template_names)
     commands = parser.add_subparsers(dest="command", required=True, metavar="<command>")
 
     record = add_command(commands, "record", "record a call, then write notes when you press Ctrl+C")
@@ -92,6 +93,12 @@ def main() -> None:
                 run_templates()
     except (CaptureError, TranscriptionError, SummaryError, JoplinError, KeyError) as error:
         sys.exit(f"afterword: {error}")
+
+
+def describe_template_names(default: str) -> str:
+    """e.g. "interview-recap, job-interview (default), meeting, one-on-one"."""
+    names = sorted(load_templates())
+    return ", ".join(f"{name} (default)" if name == default else name for name in names)
 
 
 def add_command(commands: argparse._SubParsersAction, name: str, summary: str) -> argparse.ArgumentParser:
