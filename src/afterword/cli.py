@@ -23,23 +23,30 @@ If anyone says no, use --mic-only to record just yourself.
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="afterword", description="Record a call, transcribe it locally, and write notes.")
+    parser = argparse.ArgumentParser(
+        prog="afterword",
+        description="Record a call, transcribe it locally, and write notes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,  # keeps the epilog's line breaks
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    record = commands.add_parser("record", help="record a call, then write notes when you press Ctrl+C")
+    record = add_command(commands, "record", "record a call, then write notes when you press Ctrl+C")
     add_session_arguments(record)
     record.add_argument("--mic-only", action="store_true", help="record only your microphone (if someone declines recording)")
     record.add_argument("--no-process", action="store_true", help="just record; run `afterword process` later")
 
-    import_command = commands.add_parser("import", help="write notes from an existing recording")
+    import_command = add_command(commands, "import", "write notes from an existing recording")
     import_command.add_argument("audio", type=Path, help="audio or video file of the whole conversation")
     add_session_arguments(import_command)
 
-    process = commands.add_parser("process", help="(re)write notes for a recorded session")
+    process = add_command(commands, "process", "(re)write notes for a recorded session")
     process.add_argument("session", type=Path, help="session folder")
     process.add_argument("--template", help="use a different template than the one recorded")
 
-    commands.add_parser("templates", help="list note templates")
+    add_command(commands, "templates", "list note templates")
+
+    # Show every command's options in `afterword --help`, not just the command names.
+    parser.epilog = "\n\n".join(command_help(command) for command in commands.choices.values())
 
     arguments = parser.parse_args()
     config = load_config()
@@ -55,6 +62,18 @@ def main() -> None:
                 run_templates()
     except (CaptureError, TranscriptionError, SummaryError, JoplinError, KeyError) as error:
         sys.exit(f"afterword: {error}")
+
+
+def add_command(commands: argparse._SubParsersAction, name: str, summary: str) -> argparse.ArgumentParser:
+    return commands.add_parser(name, help=summary, description=summary)
+
+
+def command_help(command: argparse.ArgumentParser) -> str:
+    """A command's usage and options, without the -h line that every command shares."""
+    lines = [line for line in command.format_help().strip().splitlines() if not line.lstrip().startswith("-h, --help")]
+    if lines[-1] == "options:":  # A command with no options of its own.
+        lines.pop()
+    return "\n".join(lines).strip()
 
 
 def add_session_arguments(parser: argparse.ArgumentParser) -> None:
