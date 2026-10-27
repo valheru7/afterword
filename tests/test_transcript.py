@@ -1,4 +1,4 @@
-from afterword.transcribe import parse_whisper_json, trim_to_speech
+from afterword.transcribe import drop_subtitle_credits, parse_whisper_json, trim_to_speech
 from afterword.transcript import Segment, format_timestamp, format_transcript, merge_tracks
 
 
@@ -36,6 +36,33 @@ def test_parse_whisper_json_converts_milliseconds_and_applies_offset():
     segments = parse_whisper_json(whisper_json, "Them", offset_seconds=0.25)
 
     assert segments == [Segment("Them", 1.75, 3.25, "Hello there.")]
+
+
+def test_parse_whisper_json_drops_made_up_subtitle_credits():
+    whisper_json = {
+        "transcription": [
+            {"offsets": {"from": 0, "to": 2000}, "text": " Transcription by CastingWords"},
+            {"offsets": {"from": 2000, "to": 4000}, "text": " Subtitles by the Amara.org community"},
+            {"offsets": {"from": 4000, "to": 6000}, "text": " Thanks for the transcription by the way."},
+        ]
+    }
+
+    segments = parse_whisper_json(whisper_json, "Them", offset_seconds=0.0)
+
+    assert [segment.text for segment in segments] == ["Thanks for the transcription by the way."]
+
+
+def test_subtitle_credit_filter_keeps_real_speech():
+    real_speech = [
+        "Captions by default are off.",
+        "Transcript by tomorrow, okay?",
+        "Subtitles by Friday would be great.",
+        "Translation by Google is pretty bad.",
+        "I used amara.org for the captions on that video.",
+    ]
+    segments = [Segment("Me", 0.0, 1.0, text) for text in real_speech]
+
+    assert drop_subtitle_credits(segments) == segments
 
 
 def test_trim_drops_segments_that_are_all_silence():

@@ -24,6 +24,24 @@ MIN_SILENCE_SECONDS = 1.0
 MIN_SPEECH_SECONDS = 0.1
 
 
+# Whisper learned partly from subtitled video, so in near-silence it sometimes "hears" a
+# subtitle credit, like "Transcription by CastingWords". Only whole segments that are one of
+# these known credits are dropped, so real speech that mentions captions or Amara is kept.
+SUBTITLE_CREDIT = re.compile(
+    r"^(transcription|transcribed|transcript|subtitles|captions|captioning)( provided| created)? by "
+    r"(castingwords|(the )?amara\.?org( community)?)\.?$",
+    re.IGNORECASE,
+)
+
+
+def is_subtitle_credit(text: str) -> bool:
+    return SUBTITLE_CREDIT.match(text.strip()) is not None
+
+
+def drop_subtitle_credits(segments: list[Segment]) -> list[Segment]:
+    return [segment for segment in segments if not is_subtitle_credit(segment.text)]
+
+
 class TranscriptionError(Exception):
     pass
 
@@ -70,7 +88,7 @@ def parse_whisper_json(whisper_json: dict, speaker: str, offset_seconds: float) 
     segments = []
     for item in whisper_json.get("transcription", []):
         text = item["text"].strip()
-        if not text:
+        if not text or is_subtitle_credit(text):
             continue
         # whisper.cpp reports offsets in milliseconds.
         start = item["offsets"]["from"] / 1000 + offset_seconds

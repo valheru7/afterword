@@ -15,7 +15,7 @@ from afterword.note import Note, build_note, write_note
 from afterword.session import Session, Track
 from afterword.summarize import SummaryRequest, summarize
 from afterword.templates import get_template
-from afterword.transcribe import TranscriptionError, transcribe_track
+from afterword.transcribe import TranscriptionError, drop_subtitle_credits, transcribe_track
 from afterword.transcript import Segment, format_transcript, merge_tracks
 
 TRANSCRIPT_FILE = "transcript.md"
@@ -71,7 +71,9 @@ def transcribe_session(session: Session, config: Config) -> str:
 def transcribe_track_cached(session: Session, track: Track, config: Config) -> list[Segment]:
     cache = session.directory / f"{track.file}.segments.json"
     if cache.exists():
-        return [Segment(**segment) for segment in json.loads(cache.read_text())]
+        segments = [Segment(**segment) for segment in json.loads(cache.read_text())]
+        # Transcripts saved before a filter existed still get it, without transcribing again.
+        return drop_subtitle_credits(segments)
 
     print(f"Transcribing {track.speaker} ({track.file})…", flush=True)
     segments = transcribe_track(
