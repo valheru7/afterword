@@ -25,6 +25,8 @@ struct SettingsView: View {
                         .tabItem { Label("Scripts", systemImage: "terminal") }
                 }
                 .disabled(model.loadState == .loading)
+                // Grouped forms draw text fields borderless, so they read as labels, not boxes to type in.
+                .textFieldStyle(.roundedBorder)
             }
         }
         .frame(width: 520)
@@ -184,20 +186,102 @@ struct NotesWriterSettings: View {
 struct TranscriptionSettings: View {
     let model: SettingsModel
 
+    /// Sizes are the download sizes on Hugging Face.
+    private static let speechModels = [
+        PresetChoice(value: "base", label: "Fastest, least accurate (148 MB)"),
+        PresetChoice(value: "small", label: "Fast (488 MB)"),
+        PresetChoice(value: "large-v3-turbo-q5_0", label: "Balanced, recommended (574 MB)"),
+        PresetChoice(value: "large-v3-turbo", label: "Most accurate (1.6 GB)"),
+    ]
+
+    private static let languages = [
+        PresetChoice(value: "auto", label: "Detect automatically"),
+        PresetChoice(value: "en", label: "English"),
+        PresetChoice(value: "es", label: "Spanish"),
+        PresetChoice(value: "fr", label: "French"),
+        PresetChoice(value: "de", label: "German"),
+        PresetChoice(value: "it", label: "Italian"),
+        PresetChoice(value: "pt", label: "Portuguese"),
+        PresetChoice(value: "nl", label: "Dutch"),
+        PresetChoice(value: "ja", label: "Japanese"),
+        PresetChoice(value: "ko", label: "Korean"),
+        PresetChoice(value: "zh", label: "Chinese"),
+        PresetChoice(value: "hi", label: "Hindi"),
+    ]
+
     var body: some View {
         Form {
             Section {
-                TextField("Whisper model", text: model.text(\.whisperModel, key: "whisper_model"))
-                SettingHint("Any ggml model name from whisper.cpp. It's downloaded the first time it's used.")
+                PresetPicker(
+                    title: "Speech model",
+                    choices: Self.speechModels,
+                    otherLabel: "Other model name",
+                    selection: model.text(\.whisperModel, key: "whisper_model")
+                )
+                SettingHint("Bigger models are more accurate but slower. A new model downloads the first time it's used.")
                 SettingError(message: model.errors["whisper_model"])
             }
             Section {
-                TextField("Language", text: model.text(\.language, key: "language"))
-                SettingHint("A language code like `en`, or `auto` to detect it.")
+                PresetPicker(
+                    title: "Language",
+                    choices: Self.languages,
+                    otherLabel: "Language code",
+                    selection: model.text(\.language, key: "language")
+                )
+                SettingHint("The language spoken on your calls. Picking it is more reliable than detecting it.")
                 SettingError(message: model.errors["language"])
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+struct PresetChoice: Identifiable {
+    let value: String
+    let label: String
+    var id: String { value }
+}
+
+/// A picker of common values, plus "Other…" with a text field for anything else,
+/// such as a whisper.cpp model name or language code that isn't in the list.
+struct PresetPicker: View {
+    let title: String
+    let choices: [PresetChoice]
+    let otherLabel: String
+    @Binding var selection: String
+
+    /// Set when the user picks "Other…", so the text field shows even before they type.
+    @State private var choseOther = false
+
+    private static let otherTag = "\u{0}other"
+
+    private var isOther: Bool {
+        choseOther || !choices.contains { $0.value == selection }
+    }
+
+    var body: some View {
+        Picker(title, selection: pickerSelection) {
+            ForEach(choices) { choice in
+                Text(choice.label).tag(choice.value)
+            }
+            Divider()
+            Text("Other…").tag(Self.otherTag)
+        }
+        if isOther {
+            TextField(otherLabel, text: $selection)
+        }
+    }
+
+    private var pickerSelection: Binding<String> {
+        Binding(
+            get: { isOther ? Self.otherTag : selection },
+            set: { newValue in
+                choseOther = newValue == Self.otherTag
+                if !choseOther {
+                    selection = newValue
+                }
+            }
+        )
     }
 }
 

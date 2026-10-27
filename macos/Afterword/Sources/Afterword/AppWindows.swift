@@ -44,7 +44,11 @@ final class AppWindows {
                     close()
                 },
                 onDone: { [self] in
-                    recorder.dismissResult()
+                    // The window can outlive its failure: another run may have started from the
+                    // menu since it opened. Only clear the failure it's showing, never a newer result.
+                    if recorder.phase == .failed(details: details, sessionDirectory: sessionDirectory) {
+                        recorder.dismissResult()
+                    }
                     close()
                 }
             )
