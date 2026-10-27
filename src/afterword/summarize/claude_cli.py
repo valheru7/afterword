@@ -11,7 +11,10 @@ from afterword.summarize import SYSTEM_PROMPT, SummaryError, SummaryRequest
 def summarize_with_claude_cli(request: SummaryRequest, model: str) -> str:
     claude = shutil.which("claude")
     if claude is None:
-        raise SummaryError("Couldn't find the `claude` command. Install Claude Code, or use another summarizer.")
+        raise SummaryError(
+            "Couldn't find the `claude` command. Install Claude Code and sign in, "
+            "or choose another notes writer in the app's Settings or with `afterword config set summarizer.provider`."
+        )
 
     command = [claude, "--print", "--system-prompt", SYSTEM_PROMPT]
     if model:

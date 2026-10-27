@@ -48,8 +48,18 @@ can record the call some other way and run `afterword import recording.m4a`.
 
 ## Install (macOS)
 
-You need macOS 14.4 or newer, [Homebrew](https://brew.sh), and Xcode 26 or its command line
-tools (`xcode-select --install`) to build the small recorder program.
+There are two ways to run Afterword on a Mac (macOS 14.4 or newer):
+
+- **The menu bar app**, which carries everything it needs: Python, whisper.cpp, ffmpeg and
+  the recorder. Nothing else to install. Download `Afterword.zip` from
+  [Releases](https://github.com/valheru7/afterword/releases) when one is published for your
+  version, or build it yourself (see [Menu bar app](#menu-bar-app-macos)). Apple Silicon only.
+- **The command line**, installed from source as below.
+
+### Command line from source
+
+You need [Homebrew](https://brew.sh) and Xcode 26 or its command line tools
+(`xcode-select --install`) to build the small recorder program.
 
 ```sh
 brew install whisper.cpp ffmpeg uv
@@ -97,13 +107,28 @@ says no, `--mic-only` still captures your side.
 
 ### Menu bar app (macOS)
 
-If you'd rather not keep a terminal open, there's a small menu bar app. It runs the
-`afterword` command you installed above, so install that first. Build it with:
+If you'd rather not keep a terminal open, there's a small menu bar app. It brings its own
+copy of the `afterword` command, Python, whisper.cpp, ffmpeg and the recorder, so it works on
+a Mac with none of them installed. To build it you need Xcode 26 or its command line tools,
+[uv](https://docs.astral.sh/uv/) and CMake (`brew install uv cmake`):
 
 ```sh
 macos/Afterword/make-app.sh
 open macos/Afterword/build/Afterword.app
 ```
+
+The first build downloads pinned, checksummed copies of Python and FFmpeg's source, and
+compiles whisper.cpp and FFmpeg, which takes a few minutes; later builds take seconds. The
+app is ad-hoc signed for the Mac that built it. Their licenses are in
+`Afterword.app/Contents/Resources/licenses`.
+
+The Whisper model is too big to include (about 574 MB for the default). The menu offers to
+download it before your first call; otherwise it downloads after the first recording. It's
+shared with the command line, in `~/.cache/afterword/models`. Notes still need a notes writer:
+Claude Code signed in, a Claude API key, or Ollama (see [Summarizers](#summarizers)).
+
+To use the app's copy of the command in Terminal too (for `afterword process`, say), link it
+onto your PATH: `ln -s /Applications/Afterword.app/Contents/Resources/afterword ~/.local/bin/afterword`.
 
 Fill in the title, who's on the call and the template, then press **Record**. **Stop** does
 the same as Ctrl+C. You get a notification when the notes are ready, and the menu lists your

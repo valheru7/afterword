@@ -22,11 +22,10 @@ cd "$(dirname "$0")"
 ./make-app.sh
 
 app="build/Afterword.app"
-# Notarization requires the hardened runtime. Under it, a microphone prompt for the recorder
-# the app starts is only allowed if the app has the audio-input entitlement.
-codesign --force --options runtime --timestamp --entitlements Afterword.entitlements \
-    --sign "$DEVELOPER_ID" "$app"
-codesign --verify --strict --verbose=2 "$app"
+# Notarization requires every program and library in the bundle to be signed with the hardened
+# runtime and a timestamp. sign-app.sh does that from the inside out, and gives the app and the
+# capture helper the audio-input entitlement the microphone needs under the hardened runtime.
+./sign-app.sh "$app" "$DEVELOPER_ID"
 
 version="$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$app/Contents/Info.plist")"
 zip="build/Afterword-$version.zip"

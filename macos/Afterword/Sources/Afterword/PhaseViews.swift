@@ -124,7 +124,8 @@ struct SetupNeededView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Afterword isn't installed yet", systemImage: "wrench.and.screwdriver")
                 .font(.headline)
-            Text("This app runs the `afterword` command, which it couldn't find on your PATH, in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin. Follow the Install (macOS) steps in the README, then check again.")
+            // Only a build without the bundled tools (a bare `swift build`) gets here.
+            Text("This copy of the app doesn't include the `afterword` command, and it couldn't find one on your PATH, in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin. Build the app with make-app.sh, or follow the Install (macOS) steps in the README, then check again.")
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

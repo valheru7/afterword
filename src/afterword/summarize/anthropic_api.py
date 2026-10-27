@@ -8,7 +8,14 @@ DEFAULT_MODEL = "claude-opus-5-5"
 
 
 def summarize_with_anthropic(request: SummaryRequest, model: str) -> str:
-    client = anthropic.Anthropic()
+    try:
+        client = anthropic.Anthropic()
+    except anthropic.AnthropicError as error:
+        # No ANTHROPIC_API_KEY and no `ant auth login` profile: the client can't even start.
+        raise SummaryError(
+            "No Claude API key found. Set ANTHROPIC_API_KEY, sign in with `ant auth login`, "
+            "or choose another notes writer in the app's Settings or with `afterword config set summarizer.provider`."
+        ) from error
     try:
         # Streaming because an hour-long transcript plus detailed notes can outlast a
         # plain request's HTTP timeout.

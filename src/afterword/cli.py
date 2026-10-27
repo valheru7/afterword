@@ -15,7 +15,7 @@ from afterword.pipeline import process_session
 from afterword.session import TYPED_NOTES_FILE, Session, Track
 from afterword.summarize import SummaryError
 from afterword.templates import load_templates
-from afterword.transcribe import TranscriptionError
+from afterword.transcribe import TranscriptionError, ensure_model, model_path
 
 CONSENT_REMINDER = """\
 Before you start: ask everyone if it's OK to record. Many places require everyone's
@@ -35,6 +35,7 @@ commands:
   import FILE [options]          write notes from an existing recording
   process SESSION_DIR [options]  (re)write notes for a recorded session
   templates                      list note templates
+  download-model [--check]       download the Whisper model now instead of on first use
   config show [--json]           show settings, defaults included
   config set KEY VALUE           change a setting, e.g. config set summarizer.provider ollama
   config test-joplin             check Joplin is reachable and the token works
@@ -90,6 +91,9 @@ def main() -> None:
 
     add_command(commands, "templates", "list note templates")
 
+    download = add_command(commands, "download-model", "download the Whisper model now instead of on first use")
+    download.add_argument("--check", action="store_true", help="only report whether it's downloaded (exit 1 if not)")
+
     config_command = add_command(commands, "config", "show or change settings")
     config_actions = config_command.add_subparsers(dest="config_action", required=True, metavar="<action>")
     show = config_actions.add_parser("show", help="show settings, defaults included")
@@ -119,6 +123,8 @@ def main() -> None:
                 run_templates()
             case "config":
                 run_config(arguments, config)
+            case "download-model":
+                run_download_model(arguments, config)
     except (CaptureError, TranscriptionError, SummaryError, JoplinError, ConfigError, KeyError) as error:
         sys.exit(f"afterword: {error}")
 
@@ -181,6 +187,16 @@ def run_process(arguments: argparse.Namespace, config: Config) -> None:
 def run_templates() -> None:
     for template in sorted(load_templates().values(), key=lambda template: template.name):
         print(f"{template.name:16} {template.description}")
+
+
+def run_download_model(arguments: argparse.Namespace, config: Config) -> None:
+    path = model_path(config.whisper_model)
+    if arguments.check:
+        print(path)
+        if not path.exists():
+            sys.exit(1)
+        return
+    print(f"Ready: {ensure_model(config.whisper_model)}")
 
 
 def run_config(arguments: argparse.Namespace, config: Config) -> None:

@@ -1,10 +1,13 @@
 """Local speech-to-text with whisper.cpp. Audio never leaves the computer."""
 
+import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.request
 import wave
 from pathlib import Path
@@ -13,6 +16,16 @@ from afterword.config import cache_dir
 from afterword.transcript import Segment
 
 WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{name}.bin"
+# SHA-256 of models we know, checked after downloading (Hugging Face lists it as the file's
+# "x-linked-etag"). Other models are downloaded without a check.
+KNOWN_MODEL_SHA256 = {
+    "large-v3-turbo-q5_0": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+}
+# A stalled connection gives up after this long instead of hanging the transcription forever.
+DOWNLOAD_TIMEOUT_SECONDS = 60
+# A partial download this old is abandoned even if a process with its PID is running (PIDs
+# get reused). An active download keeps touching its file, so it never looks this old.
+ABANDONED_DOWNLOAD_SECONDS = 24 * 60 * 60
 
 # Each track is quiet whenever the other side is talking. In long silences Whisper invents
 # words ("Thank you.") and stretches real segments back to the start of the silence. So
@@ -50,7 +63,7 @@ def transcribe_track(audio: Path, speaker: str, offset_seconds: float, model: st
     """Transcribes one audio file. Segment times are shifted by `offset_seconds` so every
     track shares the session's clock."""
     whisper = require_tool("whisper-cli", install_hint="brew install whisper-cpp")
-    model_path = ensure_model(f"ggml-{model}.bin", WHISPER_MODEL_URL.format(name=model))
+    model_file = ensure_model(model)
 
     with tempfile.TemporaryDirectory() as work_dir:
         wav = Path(work_dir) / "audio.wav"
@@ -58,7 +71,7 @@ def transcribe_track(audio: Path, speaker: str, offset_seconds: float, model: st
         output_prefix = Path(work_dir) / "transcript"
         command = [
             whisper,
-            "--model", str(model_path),
+            "--model", str(model_file),
             "--file", str(wav),
             "--language", language,
             "--output-json",
@@ -150,18 +163,92 @@ def convert_to_whisper_wav(source: Path, destination: Path) -> None:
         raise TranscriptionError(f"ffmpeg couldn't read {source.name}:\n{result.stderr.strip()}")
 
 
-def ensure_model(filename: str, url: str) -> Path:
-    """Downloads a model into the cache the first time it's needed."""
-    path = cache_dir() / "models" / filename
+def model_path(model: str) -> Path:
+    """Where a Whisper model lives once downloaded, shared by the CLI and the macOS app."""
+    return cache_dir() / "models" / f"ggml-{model}.bin"
+
+
+def ensure_model(model: str) -> Path:
+    """Downloads a model into the cache the first time it's needed, printing progress."""
+    path = model_path(model)
     if path.exists():
         return path
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading {filename} (first run only)…", flush=True)
-    partial = path.with_suffix(".part")
-    urllib.request.urlretrieve(url, partial)
-    partial.rename(path)
+    remove_abandoned_downloads(path)
+    # Named per process: the macOS app can be downloading the model while a recording's
+    # transcription starts the same download. Whichever finishes first is kept.
+    partial = path.with_name(f"{path.name}.{os.getpid()}.part")
+    url = WHISPER_MODEL_URL.format(name=model)
+    try:
+        try:
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, partial.open("wb") as file:
+                size = int(response.headers.get("Content-Length") or 0)
+                download_with_progress(response, file, size, label=f"Whisper model {model}")
+        except OSError as error:
+            raise TranscriptionError(f"Couldn't download the Whisper model {model!r} from {url}: {error}") from error
+
+        expected = KNOWN_MODEL_SHA256.get(model)
+        if expected and file_sha256(partial) != expected:
+            raise TranscriptionError(f"The downloaded Whisper model {model!r} was damaged. Try again.")
+        partial.replace(path)
+    finally:
+        # Whatever stopped the download (an error, Ctrl+C, the app quitting), don't leave
+        # hundreds of MB behind. After a successful replace() there's nothing to remove.
+        partial.unlink(missing_ok=True)
     return path
+
+
+def remove_abandoned_downloads(path: Path) -> None:
+    """Deletes partial downloads of `path` left by a process that was killed before its own
+    cleanup could run: ones whose process is gone, or that are over a day old."""
+    prefix = f"{path.name}."
+    for part in path.parent.glob(f"{prefix}*.part"):
+        pid_text = part.name.removeprefix(prefix).removesuffix(".part")
+        try:
+            age = time.time() - part.stat().st_mtime
+        except FileNotFoundError:
+            continue  # Its own process just finished or cleaned up.
+        abandoned = age > ABANDONED_DOWNLOAD_SECONDS or not pid_text.isdigit() or not process_is_running(int(pid_text))
+        if abandoned:
+            part.unlink(missing_ok=True)
+
+
+def process_is_running(pid: int) -> bool:
+    # On Windows os.kill(pid, 0) would terminate the process rather than check on it, so there
+    # only the age rule applies.
+    if os.name == "nt":
+        return True
+    try:
+        os.kill(pid, 0)  # Signal 0 checks that the process exists without touching it.
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # It exists but belongs to someone else.
+    return True
+
+
+def download_with_progress(response, file, size: int, label: str) -> None:
+    """Copies a download to `file`, printing a line every 5% (the macOS app shows the latest)."""
+    megabytes = size / 1_000_000
+    print(f"Downloading {label} ({megabytes:.0f} MB, first time only)…", flush=True)
+    copied = 0
+    last_reported = 0
+    while chunk := response.read(1 << 20):
+        file.write(chunk)
+        copied += len(chunk)
+        percent = copied * 100 // size if size else 0
+        if percent >= last_reported + 5:
+            last_reported = percent - percent % 5
+            print(f"Downloading {label}: {last_reported}% of {megabytes:.0f} MB", flush=True)
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        while chunk := file.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def require_tool(name: str, install_hint: str) -> str:

@@ -83,6 +83,7 @@ final class Recorder {
         cli = AfterwordCLI.locate()
         await loadConfig()
         await loadTemplates()
+        await checkSpeechModel()
     }
 
     func loadConfig() async {
@@ -96,8 +97,48 @@ final class Recorder {
 
     /// Takes a config the Settings window just saved.
     func apply(_ config: AfterwordConfig) {
+        let modelChanged = config.whisperModel != self.config.whisperModel
         self.config = config
         refreshNotes()
+        if modelChanged {
+            Task { await checkSpeechModel() }
+        }
+    }
+
+    // MARK: Speech model
+
+    /// The Whisper model is several hundred MB, too big to ship in the app, so it's downloaded
+    /// once into the CLI's cache. This lets you do that before the first call instead of after.
+    enum SpeechModelState: Equatable {
+        case unknown
+        case ready
+        case missing
+        case downloading(progress: String)
+        case failed(message: String)
+    }
+
+    private(set) var speechModel = SpeechModelState.unknown
+
+    func checkSpeechModel() async {
+        guard let cli else { return }
+        if case .downloading = speechModel { return }
+        speechModel = await cli.isModelDownloaded() ? .ready : .missing
+    }
+
+    func downloadSpeechModel() {
+        guard let cli else { return }
+        if case .downloading = speechModel { return }
+        speechModel = .downloading(progress: "Starting the download…")
+        Task {
+            do {
+                try await cli.downloadModel { line in
+                    speechModel = .downloading(progress: line)
+                }
+                speechModel = .ready
+            } catch {
+                speechModel = .failed(message: error.localizedDescription)
+            }
+        }
     }
 
     func refreshNotes() {
@@ -221,6 +262,8 @@ final class Recorder {
         guard run === self.run else { return }
         self.run = nil
         refreshNotes()
+        // The CLI downloads the speech model before transcribing if it wasn't there yet.
+        Task { await checkSpeechModel() }
 
         if status == 0 {
             let note = run.savedNote ?? notesFolder.newestNote
