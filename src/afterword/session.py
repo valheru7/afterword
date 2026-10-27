@@ -11,6 +11,10 @@ SESSION_FILE = "session.json"
 TYPED_NOTES_FILE = "notes.md"
 
 
+class SessionError(Exception):
+    pass
+
+
 @dataclass
 class Track:
     """One audio file. `speaker` is "Me" for your microphone and "Them" for call audio."""
@@ -54,7 +58,7 @@ class Session:
             template=raw["template"],
             started_at=datetime.fromisoformat(raw["started_at"]),
             participants=raw.get("participants", []),
-            tracks=[Track(**track) for track in raw.get("tracks", [])],
+            tracks=[checked_track(Track(**track), directory) for track in raw.get("tracks", [])],
         )
 
     def save(self) -> None:
@@ -71,6 +75,15 @@ class Session:
         """Anything you typed into notes.md during the call."""
         path = self.directory / TYPED_NOTES_FILE
         return path.read_text().strip() if path.exists() else ""
+
+
+def checked_track(track: Track, directory: Path) -> Track:
+    """A track's file must be inside its session folder. session.json is a plain file anyone can
+    edit (or hand you), and transcribing reads the file and writes a cache next to it."""
+    file = Path(track.file)
+    if file.is_absolute() or ".." in file.parts:
+        raise SessionError(f"{directory / 'session.json'} names a track outside its folder: {track.file}")
+    return track
 
 
 def slugify(text: str) -> str:

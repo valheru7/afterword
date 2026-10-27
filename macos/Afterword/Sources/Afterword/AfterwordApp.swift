@@ -7,11 +7,11 @@ struct AfterwordApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(recorder: appDelegate.recorder)
+            MenuBarMenu(recorder: appDelegate.recorder, windows: appDelegate.windows)
         } label: {
             MenuBarIcon(phase: appDelegate.recorder.phase)
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
 
         Settings {
             SettingsView(model: appDelegate.settings)

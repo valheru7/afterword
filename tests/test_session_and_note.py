@@ -1,9 +1,12 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from afterword.capture.macos import tracks_from_manifest
 from afterword.config import load_config
 from afterword.note import build_note
-from afterword.session import Session, Track, slugify
+from afterword.session import Session, SessionError, Track, slugify
 
 
 def test_manifest_start_times_become_offsets_from_the_earliest_track():
@@ -74,3 +77,22 @@ def test_config_reads_nested_tables(tmp_path):
     assert config.summarizer.provider == "ollama"
     assert config.joplin.notebook == "Interviews"
     assert config.exporters == ["joplin"]
+
+
+@pytest.mark.parametrize("track_file", ["/etc/passwd", "../other-session/mic.m4a", "sub/../../mic.m4a"])
+def test_loading_a_session_refuses_tracks_outside_its_folder(tmp_path, track_file):
+    session = Session.create(tmp_path, "Call", "meeting", [])
+    raw = json.loads((session.directory / "session.json").read_text())
+    raw["tracks"] = [{"speaker": "Me", "file": track_file}]
+    (session.directory / "session.json").write_text(json.dumps(raw))
+
+    with pytest.raises(SessionError, match="outside its folder"):
+        Session.load(session.directory)
+
+
+def test_loading_a_session_keeps_tracks_inside_its_folder(tmp_path):
+    session = Session.create(tmp_path, "Call", "meeting", [])
+    session.tracks = [Track("Me", "mic.m4a"), Track("Them", "system.m4a", 0.2)]
+    session.save()
+
+    assert Session.load(session.directory).tracks == session.tracks

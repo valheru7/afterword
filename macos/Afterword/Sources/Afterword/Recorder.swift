@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 
-/// Runs `afterword record` and follows it from start to finished note.
+/// Runs `afterword record`, `import` or `process` and follows it from start to finished note.
 @Observable
 final class Recorder {
     enum Phase: Equatable {
@@ -13,7 +13,8 @@ final class Recorder {
         /// Stopped; the CLI is transcribing and writing the note. `progress` is its latest line.
         case writingNotes(progress: String)
         case finished(note: URL?)
-        case failed(details: String)
+        /// `sessionDirectory` is set when the recording was saved, so the notes can be retried.
+        case failed(details: String, sessionDirectory: String?)
 
         var isBusy: Bool {
             switch self {
@@ -41,8 +42,8 @@ final class Recorder {
         case stop
     }
 
-    /// One `afterword record` process and what it has told us so far. Each run gets its own
-    /// object, so pipe readers that outlive their run (see `finish`) can't touch the next one.
+    /// One CLI process and what it has told us so far. Each run gets its own object, so pipe
+    /// readers that outlive their run (see `finish`) can't touch the next one.
     private final class Run {
         let process: Process
         let title: String
@@ -58,7 +59,9 @@ final class Recorder {
         }
     }
 
-    private(set) var phase: Phase = .idle
+    private(set) var phase: Phase = .idle {
+        didSet { updateRecordingClock() }
+    }
     private(set) var cli: AfterwordCLI?
     /// From `afterword config show --json`; the defaults until it answers.
     private(set) var config = AfterwordConfig.defaults
@@ -154,22 +157,56 @@ final class Recorder {
         }
     }
 
-    // MARK: Recording
+    // MARK: Recording, importing and rewriting notes
 
     func startRecording(title: String, participants: [String], template: String, micOnly: Bool) {
-        guard let cli, run == nil else { return }
-
-        var arguments = ["record", "--template", template]
-        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
-        if !trimmedTitle.isEmpty {
-            arguments += ["--title", trimmedTitle]
-        }
-        for name in participants {
-            arguments += ["--with", name]
-        }
+        var arguments = ["record", "--template=\(template)"] + Self.sessionArguments(title: title, participants: participants)
         if micOnly {
             arguments.append("--mic-only")
         }
+        startRun(arguments, title: title, firstPhase: .starting)
+    }
+
+    /// `afterword import`: notes from a recording made some other way. There's nothing to stop,
+    /// so it goes straight to writing notes.
+    func importRecording(_ file: URL, title: String, participants: [String], template: String) {
+        // Without a title the CLI would say "Untitled conversation"; the file name says more.
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        let title = trimmedTitle.isEmpty ? file.deletingPathExtension().lastPathComponent : trimmedTitle
+        let arguments = ["import", file.path, "--template=\(template)"]
+            + Self.sessionArguments(title: title, participants: participants)
+        startRun(arguments, title: title, firstPhase: .writingNotes(progress: "Importing \(file.lastPathComponent)…"))
+    }
+
+    /// `afterword process`: writes a session's notes again, reusing its saved transcript.
+    /// `template` nil keeps the one the session was recorded with. Without a `title` (for the
+    /// notification), it's read from the session.
+    func writeNotesAgain(sessionDirectory: String, title: String?, template: String?) {
+        var arguments = ["process", sessionDirectory]
+        if let template {
+            arguments.append("--template=\(template)")
+        }
+        let title = title ?? SessionFolder.title(at: sessionDirectory) ?? "Untitled conversation"
+        startRun(arguments, title: title, firstPhase: .writingNotes(progress: "Writing notes again…"), sessionDirectory: sessionDirectory)
+    }
+
+    /// `--option=value`, never `--option value`: argparse would read a value that starts with a
+    /// dash ("-Dana", "--no-process") as an option of its own.
+    private static func sessionArguments(title: String, participants: [String]) -> [String] {
+        var arguments: [String] = []
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
+        if !trimmedTitle.isEmpty {
+            arguments.append("--title=\(trimmedTitle)")
+        }
+        for name in participants {
+            arguments.append("--with=\(name)")
+        }
+        return arguments
+    }
+
+    /// Starts the CLI and follows its output until it exits. Only one run at a time.
+    private func startRun(_ arguments: [String], title: String, firstPhase: Phase, sessionDirectory: String? = nil) {
+        guard let cli, run == nil else { return }
 
         let process = cli.makeProcess(arguments: arguments)
         let output = Pipe()
@@ -181,13 +218,15 @@ final class Recorder {
         do {
             exitStatuses = try launch(process)
         } catch {
-            phase = .failed(details: "Couldn't start afterword: \(error.localizedDescription)")
+            phase = .failed(details: "Couldn't start afterword: \(error.localizedDescription)", sessionDirectory: nil)
             return
         }
 
+        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         let run = Run(process: process, title: trimmedTitle.isEmpty ? "Untitled conversation" : trimmedTitle)
+        run.sessionDirectory = sessionDirectory
         self.run = run
-        phase = .starting
+        phase = firstPhase
         Notifier.requestPermission()
 
         Task { await followOutput(of: output.fileHandleForReading, for: run) }
@@ -211,13 +250,14 @@ final class Recorder {
         phase = .writingNotes(progress: "Stopping…")
     }
 
-    /// Back to the form after a finished or failed recording.
+    /// Back to the form after a finished or failed run.
     func dismissResult() {
         guard !phase.isBusy else { return }
         phase = .idle
     }
 
-    /// Reacts to the CLI's stdout lines (see run_record in src/afterword/cli.py).
+    /// Reacts to the CLI's stdout lines (see run_record, run_import and process_session in
+    /// src/afterword).
     private func followOutput(of handle: FileHandle, for run: Run) async {
         for await line in handle.arrivingLines {
             handleOutputLine(line.trimmingCharacters(in: .whitespaces), from: run)
@@ -279,7 +319,10 @@ final class Recorder {
         }
 
         let details = run.errorLines.isEmpty ? "afterword exited with status \(status)." : run.errorLines.joined(separator: "\n")
-        phase = .failed(details: details)
+        // A recording that failed before capturing anything has a session folder but nothing in
+        // it to write notes from.
+        let retryableSession = run.sessionDirectory.flatMap { SessionFolder.hasRecording(at: $0) ? $0 : nil }
+        phase = .failed(details: details, sessionDirectory: retryableSession)
         if isQuitting, let sessionDirectory = run.sessionDirectory {
             lastNotification = Notifier.post(
                 title: "Notes for \(run.title) weren't finished",
@@ -291,15 +334,36 @@ final class Recorder {
         }
     }
 
+    // MARK: Recording clock
+
+    /// Ticks once a second while recording, so the menu's elapsed time is current when it opens.
+    private(set) var now = Date.now
+    private var clockTask: Task<Void, Never>?
+
+    private func updateRecordingClock() {
+        guard case .recording = phase else {
+            clockTask?.cancel()
+            clockTask = nil
+            return
+        }
+        guard clockTask == nil else { return }
+        clockTask = Task {
+            while !Task.isCancelled {
+                now = .now
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
     // MARK: Quitting
 
     /// How long quitting waits for notes to finish before giving up on them. Long enough for a
     /// short call's notes; for a long one the recording is kept and `afterword process` finishes it.
     private static let notesGracePeriod: Duration = .seconds(120)
 
-    /// Called when the app is asked to quit while the CLI is running. Stops the recording,
-    /// gives the notes a bounded chance to finish, then makes sure no `afterword record` is left
-    /// behind. A crash or force quit skips this.
+    /// Called when the app is asked to quit while the CLI is running. Stops a recording, gives
+    /// the notes (from a recording, an import or a rewrite) a bounded chance to finish, then
+    /// makes sure no CLI process is left behind. A crash or force quit skips this.
     func stopBeforeQuitting() async {
         guard let run else { return }
         isQuitting = true

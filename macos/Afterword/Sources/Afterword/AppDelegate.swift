@@ -3,11 +3,18 @@ import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let recorder = Recorder()
+    let windows = AppWindows()
     lazy var settings = SettingsModel(recorder: recorder)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
         Task { await recorder.reload() }
+        // Notes can be written from Terminal too, so refresh the list whenever a menu opens.
+        NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+        ) { [recorder] _ in
+            MainActor.assumeIsolated { recorder.refreshNotes() }
+        }
     }
 
     /// Quitting mid-call would otherwise leave `afterword record` running with nobody to stop

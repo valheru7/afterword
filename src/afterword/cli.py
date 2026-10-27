@@ -12,7 +12,7 @@ from afterword.config import Config, config_file, load_config
 from afterword.config_file import ConfigError, check_joplin, effective_config, flattened, set_value
 from afterword.exporters.joplin import JoplinError
 from afterword.pipeline import process_session
-from afterword.session import TYPED_NOTES_FILE, Session, Track
+from afterword.session import TYPED_NOTES_FILE, Session, SessionError, Track
 from afterword.summarize import SummaryError
 from afterword.templates import load_templates
 from afterword.transcribe import TranscriptionError, ensure_model, model_path
@@ -125,7 +125,7 @@ def main() -> None:
                 run_config(arguments, config)
             case "download-model":
                 run_download_model(arguments, config)
-    except (CaptureError, TranscriptionError, SummaryError, JoplinError, ConfigError, KeyError) as error:
+    except (CaptureError, TranscriptionError, SummaryError, JoplinError, ConfigError, SessionError, KeyError) as error:
         sys.exit(f"afterword: {error}")
 
 
@@ -167,6 +167,8 @@ def run_import(arguments: argparse.Namespace, config: Config) -> None:
     if not arguments.audio.exists():
         sys.exit(f"afterword: {arguments.audio} doesn't exist")
     session = Session.create(config.sessions_dir, arguments.title, arguments.template or config.template, arguments.participants)
+    # Same line as `record` prints, so the macOS app knows where to retry from if this fails.
+    print(f"Session folder: {session.directory}", flush=True)
     copied = session.directory / f"recording{arguments.audio.suffix.lower()}"
     shutil.copy2(arguments.audio, copied)
     # One mixed recording can't tell speakers apart, so everyone is "Speaker" and the

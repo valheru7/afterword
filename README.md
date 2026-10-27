@@ -130,11 +130,13 @@ Claude Code signed in, a Claude API key, or Ollama (see [Summarizers](#summarize
 To use the app's copy of the command in Terminal too (for `afterword process`, say), link it
 onto your PATH: `ln -s /Applications/Afterword.app/Contents/Resources/afterword ~/.local/bin/afterword`.
 
-Fill in the title, who's on the call and the template, then press **Record**. **Stop** does
-the same as Ctrl+C. You get a notification when the notes are ready, and the menu lists your
-recent notes. **Settings…** in the menu edits the same settings as the config file below
-(folders, template, notes writer, Whisper, Joplin and after-note scripts) and saves each
-change as you make it. The first recording asks for Microphone and System Audio Recording permission
+Choose **New Recording…** in its menu, fill in the title, who's on the call and the
+template, then start. **Stop Recording** does the same as Ctrl+C. You get a notification when
+the notes are ready. **Import Audio…** writes notes from a recording made some other way, and
+**Recent Notes** opens your notes or writes one again with another template, reusing its
+transcript. **Settings…** edits the same settings as the config file below (folders,
+template, notes writer, Whisper, Joplin and after-note scripts) and saves each change as you
+make it. The first recording asks for Microphone and System Audio Recording permission
 for Afterword instead of your terminal. To start it at login, drag `Afterword.app` into
 Applications and add it under System Settings → General → Login Items.
 
