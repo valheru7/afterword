@@ -41,3 +41,59 @@ def test_short_echo_matching_the_whole_segment_is_dropped():
     echo = Segment("Me", 31.1, 31.6, "Nice.")
 
     assert remove_echo([echo], [them]) == []
+
+
+def test_echo_split_by_a_filler_is_dropped():
+    them = Segment("Them", 95.0, 100.0, "He, unfortunately, has a very large project he had to take on.")
+    echo = Segment("Me", 95.2, 96.0, "um he unfortunately")
+
+    assert remove_echo([echo], [them]) == []
+
+
+def test_fillers_inside_an_echoed_run_go_with_it():
+    them = Segment("Them", 10.0, 14.0, "We have the salary range provided as about 100k to 181.")
+    mixed = Segment("Me", 10.1, 20.0, "salary uh range provided as um about 100k to 181 okay that's lower than I expected")
+
+    assert remove_echo([mixed], [them]) == [Segment("Me", 14.0, 20.0, "okay that's lower than I expected")]
+
+
+def test_filler_on_both_tracks_still_counts_toward_a_match():
+    them = Segment("Them", 50.0, 55.0, "Um, I checked, uh, test coverage yesterday.")
+    echo = Segment("Me", 50.1, 52.0, "Um, I checked")
+
+    assert remove_echo([echo], [them]) == []
+
+
+def test_your_own_filler_with_one_of_their_words_is_kept():
+    them = Segment("Them", 20.0, 24.0, "So what would you do next?")
+    mine = Segment("Me", 24.5, 25.0, "So, um,")
+
+    assert remove_echo([mine], [them]) == [mine]
+
+
+def test_a_lone_filler_with_no_echo_is_kept():
+    them = Segment("Them", 20.0, 24.0, "What would you do next?")
+    mine = Segment("Me", 24.5, 25.0, "Um,")
+
+    assert remove_echo([mine], [them]) == [mine]
+
+
+def test_your_short_reply_after_they_finish_is_kept():
+    them = Segment("Them", 29.0, 30.4, "Okay, thank you.")
+    mine = Segment("Me", 30.5, 31.5, "Uh, thank you.")
+
+    assert remove_echo([mine], [them]) == [mine]
+
+
+def test_filler_before_an_echoed_opening_goes_with_it():
+    them = Segment("Them", 95.0, 97.0, "He, unfortunately, has a very large project.")
+    mixed = Segment("Me", 95.1, 99.0, "um he unfortunately has a very large project okay sure")
+
+    assert remove_echo([mixed], [them]) == [Segment("Me", 97.0, 99.0, "okay sure")]
+
+
+def test_one_word_backchannel_while_they_talk_is_kept():
+    them = Segment("Them", 60.0, 66.0, "Okay, so then the staff pair the card reader with the iPad.")
+    mine = Segment("Me", 60.5, 61.0, "Um, uh, okay.")
+
+    assert remove_echo([mine], [them]) == [mine]
