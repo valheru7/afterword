@@ -1,12 +1,15 @@
 """The `afterword` command."""
 
 import argparse
+import json
 import shutil
 import sys
+import tomllib
 from pathlib import Path
 
 from afterword.capture import CaptureError, record_until_stopped
-from afterword.config import Config, load_config
+from afterword.config import Config, config_file, load_config
+from afterword.config_file import ConfigError, check_joplin, effective_config, flattened, set_value
 from afterword.exporters.joplin import JoplinError
 from afterword.pipeline import process_session
 from afterword.session import TYPED_NOTES_FILE, Session, Track
@@ -32,6 +35,9 @@ commands:
   import FILE [options]          write notes from an existing recording
   process SESSION_DIR [options]  (re)write notes for a recorded session
   templates                      list note templates
+  config show [--json]           show settings, defaults included
+  config set KEY VALUE           change a setting, e.g. config set summarizer.provider ollama
+  config test-joplin             check Joplin is reachable and the token works
 
 options:
   --title TITLE      e.g. "Acme – hiring manager"
@@ -57,7 +63,11 @@ class OverviewHelp(argparse.Action):
 
 
 def main() -> None:
-    config = load_config()
+    try:
+        config = load_config()
+    except tomllib.TOMLDecodeError as error:
+        # Every command reads the config, so say what's wrong instead of showing a traceback.
+        sys.exit(f"afterword: {config_file()} isn't valid TOML: {error}")
     template_names = describe_template_names(config.template)
     template_help = f"note template: {template_names}"
 
@@ -80,6 +90,22 @@ def main() -> None:
 
     add_command(commands, "templates", "list note templates")
 
+    config_command = add_command(commands, "config", "show or change settings")
+    config_actions = config_command.add_subparsers(dest="config_action", required=True, metavar="<action>")
+    show = config_actions.add_parser("show", help="show settings, defaults included")
+    show.add_argument("--json", action="store_true", help="print JSON (paths expanded)")
+    set_command = config_actions.add_parser(
+        "set",
+        help="change a setting",
+        description=(
+            'Change a setting. Lists are JSON arrays, e.g. config set exporters \'["joplin"]\'. '
+            "Use - as the value to read it from stdin, e.g. for joplin.token."
+        ),
+    )
+    set_command.add_argument("key", metavar="KEY", help="e.g. template, notes_dir, summarizer.provider, joplin.token")
+    set_command.add_argument("value", metavar="VALUE", help="the value, or - to read it from stdin (for tokens)")
+    config_actions.add_parser("test-joplin", help="check Joplin is reachable and the token works")
+
     arguments = parser.parse_args()
     try:
         match arguments.command:
@@ -91,7 +117,9 @@ def main() -> None:
                 run_process(arguments, config)
             case "templates":
                 run_templates()
-    except (CaptureError, TranscriptionError, SummaryError, JoplinError, KeyError) as error:
+            case "config":
+                run_config(arguments, config)
+    except (CaptureError, TranscriptionError, SummaryError, JoplinError, ConfigError, KeyError) as error:
         sys.exit(f"afterword: {error}")
 
 
@@ -153,6 +181,31 @@ def run_process(arguments: argparse.Namespace, config: Config) -> None:
 def run_templates() -> None:
     for template in sorted(load_templates().values(), key=lambda template: template.name):
         print(f"{template.name:16} {template.description}")
+
+
+def run_config(arguments: argparse.Namespace, config: Config) -> None:
+    match arguments.config_action:
+        case "show":
+            values = effective_config(config)
+            if arguments.json:
+                print(json.dumps(values, indent=2))
+                return
+            for key, value in flattened(values):
+                # Hide the token on screen (screen shares, streams); --json, for programs, keeps it.
+                shown = "(set)" if key == "joplin.token" and value else json.dumps(value, ensure_ascii=False)
+                print(f"{key} = {shown}")
+        case "set":
+            value = arguments.value
+            if value == "-":
+                # Read secrets from stdin so they don't show up in `ps` or shell history.
+                value = sys.stdin.read().removesuffix("\n")
+            set_value(arguments.key, value)
+            print(f"Set {arguments.key}.")
+        case "test-joplin":
+            connected, message = check_joplin(config.joplin)
+            print(message)
+            if not connected:
+                sys.exit(1)
 
 
 if __name__ == "__main__":

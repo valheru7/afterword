@@ -18,6 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "anthropic>=0.70",
+    "tomlkit>=0.15.2",
 ]
 
 [project.urls]

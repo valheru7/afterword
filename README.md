@@ -78,6 +78,7 @@ and they'll be included.
 | `afterword import FILE` | Write notes from any existing audio or video recording. |
 | `afterword process SESSION_DIR` | Rewrite notes for a session, e.g. with `--template meeting`. Transcripts are reused. |
 | `afterword templates` | List note templates. |
+| `afterword config` | Show (`config show`) or change (`config set KEY VALUE`) settings. See [Configure](#configure). |
 
 ### Ask first
 
@@ -94,6 +95,36 @@ says no, `--mic-only` still captures your side.
 - Everyone on the call side shares one "Them" track. The summarizer separates panel
   interviewers from context and the names you pass with `--with`.
 
+### Menu bar app (macOS)
+
+If you'd rather not keep a terminal open, there's a small menu bar app. It runs the
+`afterword` command you installed above, so install that first. Build it with:
+
+```sh
+macos/Afterword/make-app.sh
+open macos/Afterword/build/Afterword.app
+```
+
+Fill in the title, who's on the call and the template, then press **Record**. **Stop** does
+the same as Ctrl+C. You get a notification when the notes are ready, and the menu lists your
+recent notes. **Settings…** in the menu edits the same settings as the config file below
+(folders, template, notes writer, Whisper, Joplin and after-note scripts) and saves each
+change as you make it. The first recording asks for Microphone and System Audio Recording permission
+for Afterword instead of your terminal. To start it at login, drag `Afterword.app` into
+Applications and add it under System Settings → General → Login Items.
+
+Quitting the app mid-call stops the recording and gives the notes up to two minutes to finish.
+If they don't, the recording is kept and `afterword process SESSION_DIR` writes the notes
+later. If the app crashes or is force quit, it can't stop the recording, so press Ctrl+C on
+the `afterword record` process yourself or run `pkill -INT -f "afterword record"`.
+
+Mac apps don't load your shell profile, so an `ANTHROPIC_API_KEY` exported in `~/.zshrc`
+won't reach the app (the config file has no setting for it). The simplest fix is to sign in
+once with `ant auth login`: the Claude API library then finds those credentials without any
+environment variable. Otherwise, run `launchctl setenv ANTHROPIC_API_KEY "..."` and then
+quit and reopen the app. An app started from Login Items starts before you can run that, so
+it needs the same relaunch. The `claude-cli` and `ollama` summarizers need no key.
+
 ## Templates
 
 | Template | For |
@@ -108,7 +139,20 @@ A template is a markdown file of instructions. Add your own to
 
 ## Configure
 
-Everything is optional. Create `~/.config/afterword/config.toml`:
+Everything is optional. Change settings from the command line, which keeps your comments
+and formatting, and keeps the file readable only by you since it can hold the Joplin token:
+
+```sh
+afterword config show                          # every setting, defaults included
+afterword config set summarizer.provider ollama
+afterword config set exporters '["joplin"]'    # lists are JSON arrays
+afterword config test-joplin                   # check the Joplin token works
+```
+
+To keep a secret like the Joplin token out of your shell history, pass `-` as the value,
+then paste the token and press Return and Ctrl+D: `afterword config set joplin.token -`.
+
+Or create `~/.config/afterword/config.toml` yourself:
 
 ```toml
 template = "job-interview"          # default template

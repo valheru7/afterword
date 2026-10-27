@@ -7,6 +7,8 @@ dist/
 
 # Swift
 macos/afterword-capture/.build/
+macos/Afterword/.build/
+macos/Afterword/build/
 .swiftpm/
 
 # Never commit recordings, transcripts or notes, even if a session folder ends up here.

@@ -17,10 +17,13 @@ def cache_dir() -> Path:
     return Path(base) / "afterword"
 
 
+# "anthropic" (Claude API key), "claude-cli" (Claude Code subscription) or "ollama" (local, free).
+SUMMARIZER_PROVIDERS = ("anthropic", "claude-cli", "ollama")
+
+
 @dataclass
 class SummarizerConfig:
-    # "anthropic" (Claude API key), "claude-cli" (Claude Code subscription) or "ollama" (local, free).
-    provider: str = "anthropic"
+    provider: str = "anthropic"  # one of SUMMARIZER_PROVIDERS
     # Empty means the provider's own default model.
     model: str = ""
 
@@ -51,8 +54,12 @@ class Config:
     after_note: list[str] = field(default_factory=list)
 
 
+def config_file() -> Path:
+    return config_dir() / "config.toml"
+
+
 def load_config(path: Path | None = None) -> Config:
-    path = path or config_dir() / "config.toml"
+    path = path or config_file()
     if not path.exists():
         return Config()
 
