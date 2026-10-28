@@ -31,7 +31,6 @@ struct SettingsView: View {
         }
         .frame(width: 520)
         .task { await model.load() }
-        .onDisappear { Task { await model.flushPendingSaves() } }
     }
 }
 

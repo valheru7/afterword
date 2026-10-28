@@ -4,9 +4,8 @@ import SwiftUI
 /// app's own items. Text items show as disabled status lines in a native menu.
 struct MenuBarMenu: View {
     let recorder: Recorder
+    let settings: SettingsModel
     let windows: AppWindows
-
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         status
@@ -17,9 +16,7 @@ struct MenuBarMenu: View {
         Button("Open Notes Folder", action: recorder.openNotesFolder)
         Divider()
         Button("Settings…") {
-            // A menu bar app isn't active, so its windows would open behind others.
-            NSApplication.shared.activate()
-            openSettings()
+            windows.showSettings(model: settings)
         }
         .keyboardShortcut(",")
         // Quitting while busy stops the recording and gives the notes a while to finish

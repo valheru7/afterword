@@ -1,14 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// The app's one small window, for the New Recording and Import forms, setup, and a failed
-/// run's details.
+/// The app's windows: one small window for the New Recording and Import forms, setup, and a
+/// failed run's details, and the Settings window.
 ///
 /// It's an AppKit window hosting SwiftUI rather than a SwiftUI `Window` scene: a scene can open
 /// by itself at launch, and the modifier that stops that (`defaultLaunchBehavior`) needs
 /// macOS 15. A menu bar app also isn't active, so the window has to be brought to the front.
+/// Settings gets the same treatment: SwiftUI's `openSettings` sometimes does nothing in an app
+/// with no Dock icon, notably when its window is already open behind other apps.
 final class AppWindows {
     private var window: NSWindow?
+    private var settingsWindow: NSWindow?
 
     func showNewRecording(recorder: Recorder) {
         show(title: "New Recording") {
@@ -18,7 +21,7 @@ final class AppWindows {
 
     /// Picks the file first, then shows the form for the rest.
     func showImport(recorder: Recorder) {
-        NSApplication.shared.activate()
+        NSApplication.shared.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.message = "Choose a recording to write notes from."
         panel.prompt = "Choose"
@@ -55,6 +58,21 @@ final class AppWindows {
         }
     }
 
+    /// Reuses the one Settings window, so a second click brings it forward instead of opening
+    /// another. Each time it opens it gets a fresh view, whose `.task` reloads the config:
+    /// it may have changed in Terminal since, and editing stale values would overwrite that.
+    func showSettings(model: SettingsModel) {
+        let window = settingsWindow ?? makeSettingsWindow(model: model)
+        settingsWindow = window
+        if !window.isVisible {
+            let hosting = NSHostingController(rootView: SettingsView(model: model))
+            hosting.sizingOptions = [.preferredContentSize]
+            window.contentViewController = hosting
+            window.center()
+        }
+        bringToFront(window)
+    }
+
     func close() {
         window?.close()
     }
@@ -70,9 +88,33 @@ final class AppWindows {
         if !window.isVisible {
             window.center()
         }
-        NSApplication.shared.activate()
-        window.makeKeyAndOrderFront(nil)
+        bringToFront(window)
         self.window = window
+    }
+
+    private func makeSettingsWindow(model: SettingsModel) -> NSWindow {
+        let window = makeWindow()
+        window.title = "Afterword Settings"
+        // SwiftUI's onDisappear doesn't fire when an AppKit window closes, so save what was
+        // just typed from here instead of waiting for the debounce.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                _ = Task { await model.flushPendingSaves() }
+            }
+        }
+        return window
+    }
+
+    /// A menu bar app is never the active app, and since macOS 14 `activate()` only asks:
+    /// clicking a menu item doesn't count as the user switching apps, so the request can be
+    /// refused and the window opens behind everything else. Ignoring other apps forces it,
+    /// which is what the user asked for by choosing the menu item.
+    private func bringToFront(_ window: NSWindow) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     private func makeWindow() -> NSWindow {

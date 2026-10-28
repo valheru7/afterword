@@ -7,15 +7,12 @@ struct AfterwordApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarMenu(recorder: appDelegate.recorder, windows: appDelegate.windows)
+            MenuBarMenu(recorder: appDelegate.recorder, settings: appDelegate.settings, windows: appDelegate.windows)
         } label: {
             MenuBarIcon(phase: appDelegate.recorder.phase)
         }
         .menuBarExtraStyle(.menu)
-
-        Settings {
-            SettingsView(model: appDelegate.settings)
-        }
+        // Settings opens in an AppKit window (see AppWindows.showSettings), not a Settings scene.
     }
 }
 
