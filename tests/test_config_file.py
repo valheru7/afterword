@@ -113,6 +113,8 @@ def test_set_types_values_by_field(tmp_path):
         ("template", "no-such-template", "No template named"),
         ("notes_dir", " ", "folder path"),
         ("joplin.url", "localhost:41184", "http://"),
+        ("whisper_model", " ", "can't be empty"),
+        ("language", "", "can't be empty"),
     ],
 )
 def test_set_rejects_bad_keys_and_values_without_writing(tmp_path, key, value, message):

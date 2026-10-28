@@ -143,6 +143,12 @@ def validate(key: str, value: Any) -> None:
             unknown = [name for name in value if name not in EXPORTERS]
             if unknown:
                 raise ConfigError(f"Unknown exporter {unknown[0]!r}. Exporters: {', '.join(EXPORTERS)}")
+        case "whisper_model":
+            if not value.strip():
+                raise ConfigError("whisper_model can't be empty. The default is large-v3-turbo-q5_0.")
+        case "language":
+            if not value.strip():
+                raise ConfigError("language can't be empty. Use a code like en, or auto to detect it.")
         case "joplin.url":
             if not value.startswith(("http://", "https://")):
                 raise ConfigError("joplin.url should start with http:// (usually http://localhost:41184).")

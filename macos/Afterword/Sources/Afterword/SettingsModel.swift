@@ -54,6 +54,9 @@ final class SettingsModel {
 
     func load() async {
         guard let cli else { return }
+        // Disables the form until the fresh values are in, so nothing typed into the old
+        // ones (shown for a moment when Settings reopens) is overwritten by the reload.
+        loadState = .loading
         await flushPendingSaves()
         do {
             let config = try await cli.config()

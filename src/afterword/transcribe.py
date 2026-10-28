@@ -19,7 +19,11 @@ WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/g
 # SHA-256 of models we know, checked after downloading (Hugging Face lists it as the file's
 # "x-linked-etag"). Other models are downloaded without a check.
 KNOWN_MODEL_SHA256 = {
+    # The ones the Settings window offers.
+    "base": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "small": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
     "large-v3-turbo-q5_0": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+    "large-v3-turbo": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
 }
 # A stalled connection gives up after this long instead of hanging the transcription forever.
 DOWNLOAD_TIMEOUT_SECONDS = 60
