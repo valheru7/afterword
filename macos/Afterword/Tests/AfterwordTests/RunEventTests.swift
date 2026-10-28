@@ -4,10 +4,10 @@ import Testing
 
 struct RunEventTests {
     @Test(arguments: [
-        ("Session folder: /Users/me/Afterword/sessions/2026-10-27 Acme", RunEvent.sessionFolder("/Users/me/Afterword/sessions/2026-10-27 Acme")),
+        ("Session folder: /tmp/afterword/sessions/2026-10-27 Acme", RunEvent.sessionFolder("/tmp/afterword/sessions/2026-10-27 Acme")),
         ("Recording.", .recordingStarted),
         ("Recording. Press Ctrl+C to stop.", .recordingStarted),
-        ("Saved /Users/me/Afterword/notes/Acme.md", .savedNote(URL(fileURLWithPath: "/Users/me/Afterword/notes/Acme.md"), line: "Saved /Users/me/Afterword/notes/Acme.md")),
+        ("Saved /tmp/afterword/notes/Acme.md", .savedNote(URL(fileURLWithPath: "/tmp/afterword/notes/Acme.md"), line: "Saved /tmp/afterword/notes/Acme.md")),
         ("Transcribing Me…", .progress("Transcribing Me…")),
         ("Stopped recording.", .progress("Stopped recording.")),
         ("  Writing notes…  ", .progress("Writing notes…")),
