@@ -13,14 +13,21 @@ final class AppWindows {
     private var window: NSWindow?
     private var settingsWindow: NSWindow?
 
+    /// Starting something new clears the last run's result from the menu.
     func showNewRecording(recorder: Recorder) {
-        show(title: "New Recording") {
-            SessionForm(mode: .record, recorder: recorder, onDone: close)
-        }
+        recorder.dismissResult()
+        showRecordingForm(recorder: recorder)
     }
 
-    /// Picks the file first, then shows the form for the rest.
+    /// Without the CLI, the New Recording form shows the setup steps instead.
+    func showSetup(recorder: Recorder) {
+        showRecordingForm(recorder: recorder)
+    }
+
+    /// Picks the file first, then shows the form for the rest. Like New Recording, it clears
+    /// the last run's result, even if no file is picked.
     func showImport(recorder: Recorder) {
+        recorder.dismissResult()
         NSApplication.shared.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.message = "Choose a recording to write notes from."
@@ -41,17 +48,11 @@ final class AppWindows {
                 sessionDirectory: sessionDirectory,
                 templates: recorder.templates,
                 onWriteAgain: { [self] template in
-                    if let sessionDirectory {
-                        recorder.writeNotesAgain(sessionDirectory: sessionDirectory, title: nil, template: template)
-                    }
+                    recorder.writeNotesAgain(afterFailureIn: sessionDirectory, template: template)
                     close()
                 },
                 onDone: { [self] in
-                    // The window can outlive its failure: another run may have started from the
-                    // menu since it opened. Only clear the failure it's showing, never a newer result.
-                    if recorder.phase == .failed(details: details, sessionDirectory: sessionDirectory) {
-                        recorder.dismissResult()
-                    }
+                    recorder.dismissFailure(details: details, sessionDirectory: sessionDirectory)
                     close()
                 }
             )
@@ -73,6 +74,12 @@ final class AppWindows {
         bringToFront(window)
     }
 
+    private func showRecordingForm(recorder: Recorder) {
+        show(title: "New Recording") {
+            SessionForm(mode: .record, recorder: recorder, onDone: close)
+        }
+    }
+
     func close() {
         window?.close()
     }
@@ -89,6 +96,12 @@ final class AppWindows {
             window.center()
         }
         bringToFront(window)
+        // Put the cursor in the first text field, so the form is ready to type into. SwiftUI's
+        // own focus requests (`.defaultFocus`, `@FocusState` set in `onAppear`) are made before
+        // this window is key and get dropped, leaving the window itself focused. The layout pass
+        // first creates the fields of a window that's opening for the first time.
+        window.layoutIfNeeded()
+        window.selectNextKeyView(nil)
         self.window = window
     }
 
@@ -100,9 +113,7 @@ final class AppWindows {
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: window, queue: .main
         ) { _ in
-            MainActor.assumeIsolated {
-                _ = Task { await model.flushPendingSaves() }
-            }
+            MainActor.assumeIsolated { model.windowWillClose() }
         }
         return window
     }

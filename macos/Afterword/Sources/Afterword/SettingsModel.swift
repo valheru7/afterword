@@ -70,6 +70,25 @@ final class SettingsModel {
         }
     }
 
+    /// The "couldn't read your settings" screen's Try Again.
+    func retryLoad() {
+        Task { await load() }
+    }
+
+    /// The setup screen's Check Again: looks for the CLI again, then reads its settings.
+    func checkForCLIAgain() {
+        Task {
+            await recorder.reload()
+            await load()
+        }
+    }
+
+    /// AppKit closing the window doesn't fire SwiftUI's onDisappear, so the window calls this
+    /// to save what was just typed instead of waiting for the pause.
+    func windowWillClose() {
+        Task { await flushPendingSaves() }
+    }
+
     // MARK: Bindings that save
 
     /// A binding to one setting in `draft`. Setting it saves the value, right away or (for
@@ -150,17 +169,19 @@ final class SettingsModel {
 
     // MARK: Joplin
 
-    func testJoplin() async {
+    func testJoplin() {
         guard let cli else { return }
         joplinTest = .running
-        // Test what's on screen, including a token typed a moment ago.
-        await flushPendingSaves()
-        await saveQueue?.value
-        do {
-            let result = try await cli.testJoplin()
-            joplinTest = .finished(connected: result.connected, message: result.message)
-        } catch {
-            joplinTest = .finished(connected: false, message: error.localizedDescription)
+        Task {
+            // Test what's on screen, including a token typed a moment ago.
+            await flushPendingSaves()
+            await saveQueue?.value
+            do {
+                let result = try await cli.testJoplin()
+                joplinTest = .finished(connected: result.connected, message: result.message)
+            } catch {
+                joplinTest = .finished(connected: false, message: error.localizedDescription)
+            }
         }
     }
 

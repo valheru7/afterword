@@ -24,20 +24,24 @@ struct NotesFolder {
             at: directory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        let notes = files.compactMap { url -> RecentNote? in
+        let noteFiles = files.compactMap { url -> (url: URL, modified: Date)? in
             guard url.pathExtension == "md",
                   let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.isRegularFile == true else { return nil }
-            let modified = values.contentModificationDate ?? .distantPast
-            let header = NoteHeader(of: url)
+            return (url, values.contentModificationDate ?? .distantPast)
+        }
+        // This runs each time a menu opens, so only the newest notes' files are read, not
+        // every note in the folder.
+        let newest = noteFiles.sorted { $0.modified > $1.modified }.prefix(limit)
+        return newest.map { file in
+            let header = NoteHeader(of: file.url)
             return RecentNote(
-                url: url,
-                title: header.title ?? url.deletingPathExtension().lastPathComponent,
-                modified: modified,
+                url: file.url,
+                title: header.title ?? file.url.deletingPathExtension().lastPathComponent,
+                modified: file.modified,
                 sessionDirectory: header.session.flatMap { SessionFolder.hasRecording(at: $0) ? $0 : nil }
             )
         }
-        return Array(notes.sorted { $0.modified > $1.modified }.prefix(limit))
     }
 
     var newestNote: URL? { recentNotes(limit: 1).first?.url }

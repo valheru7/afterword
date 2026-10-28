@@ -1,12 +1,14 @@
 import Foundation
 
 extension FileHandle {
-    /// The handle's lines as they arrive, ending when the other end closes.
+    /// Starts reading the handle and returns its lines as they arrive, ending when the other end
+    /// closes. Call it once per handle: it takes over `readabilityHandler`, so a second call
+    /// would take the data away from the first.
     ///
     /// `bytes.lines` can hold a pipe's output back until the pipe closes: the app sat on
     /// "Starting…" for a whole recording because the CLI's "Recording." line only got through
     /// once the CLI exited. `readabilityHandler` fires as soon as any data is written.
-    nonisolated var arrivingLines: AsyncStream<String> {
+    nonisolated func lines() -> AsyncStream<String> {
         let (chunks, chunkContinuation) = AsyncStream.makeStream(of: Data.self)
         readabilityHandler = { handle in
             let data = handle.availableData

@@ -4,13 +4,7 @@ import UniformTypeIdentifiers
 /// The New Recording and Import Audio form: what `afterword record` or `afterword import`
 /// takes. Closes when the run starts; the menu follows it from there.
 struct SessionForm: View {
-    enum Mode {
-        case record
-        /// Notes from a recording made some other way (a voice memo, a call another app recorded).
-        case importFile(URL)
-    }
-
-    let mode: Mode
+    let mode: Recorder.SessionKind
     let recorder: Recorder
     let onDone: () -> Void
 
@@ -20,7 +14,7 @@ struct SessionForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if recorder.cli == nil {
-                SetupNeededView { Task { await recorder.reload() } }
+                SetupNeededView(onCheckAgain: recorder.checkForCLIAgain)
             } else {
                 form
             }
@@ -89,13 +83,7 @@ struct SessionForm: View {
     }
 
     private func start() {
-        let template = details.template(defaultTemplate: recorder.config.template)
-        switch mode {
-        case .record:
-            recorder.startRecording(title: details.title, participants: details.participantNames, template: template, micOnly: micOnly)
-        case .importFile(let file):
-            recorder.importRecording(file, title: details.title, participants: details.participantNames, template: template)
-        }
+        recorder.startSession(mode, details: details, micOnly: micOnly)
         onDone()
     }
 

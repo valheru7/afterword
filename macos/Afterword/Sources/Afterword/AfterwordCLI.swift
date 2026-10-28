@@ -138,13 +138,13 @@ struct AfterwordCLI {
         // the CLI would block on writing and never exit.
         let errorTail = Task {
             var lines: [String] = []
-            for await line in errors.fileHandleForReading.arrivingLines {
+            for await line in errors.fileHandleForReading.lines() {
                 lines.append(line)
                 if lines.count > 12 { lines.removeFirst() }  // The end is where the error is.
             }
             return lines
         }
-        for await line in output.fileHandleForReading.arrivingLines where !line.isEmpty {
+        for await line in output.fileHandleForReading.lines() where !line.isEmpty {
             progress(line)
         }
         let status = await exitStatuses.firstValue()

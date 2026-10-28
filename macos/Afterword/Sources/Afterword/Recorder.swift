@@ -59,9 +59,7 @@ final class Recorder {
         }
     }
 
-    private(set) var phase: Phase = .idle {
-        didSet { updateRecordingClock() }
-    }
+    private(set) var phase: Phase = .idle
     private(set) var cli: AfterwordCLI?
     /// From `afterword config show --json`; the defaults until it answers.
     private(set) var config = AfterwordConfig.defaults
@@ -87,6 +85,11 @@ final class Recorder {
         await loadConfig()
         await loadTemplates()
         await checkSpeechModel()
+    }
+
+    /// The setup screen's Check Again button.
+    func checkForCLIAgain() {
+        Task { await reload() }
     }
 
     func loadConfig() async {
@@ -159,7 +162,31 @@ final class Recorder {
 
     // MARK: Recording, importing and rewriting notes
 
-    func startRecording(title: String, participants: [String], template: String, micOnly: Bool) {
+    /// What the New Recording and Import Audio forms start.
+    enum SessionKind {
+        case record
+        /// Notes from a recording made some other way (a voice memo, a call another app recorded).
+        case importFile(URL)
+    }
+
+    /// Whether New Recording, Import Audio and Write Notes Again can start something now.
+    var canStartSession: Bool {
+        cli != nil && !phase.isBusy
+    }
+
+    /// The form's Start Recording or Import button. Without a chosen template, the config's
+    /// default is used; `micOnly` only applies to a recording.
+    func startSession(_ kind: SessionKind, details: SessionDetails, micOnly: Bool) {
+        let template = details.template(defaultTemplate: config.template)
+        switch kind {
+        case .record:
+            startRecording(title: details.title, participants: details.participantNames, template: template, micOnly: micOnly)
+        case .importFile(let file):
+            importRecording(file, title: details.title, participants: details.participantNames, template: template)
+        }
+    }
+
+    private func startRecording(title: String, participants: [String], template: String, micOnly: Bool) {
         var arguments = ["record", "--template=\(template)"] + Self.sessionArguments(title: title, participants: participants)
         if micOnly {
             arguments.append("--mic-only")
@@ -169,7 +196,7 @@ final class Recorder {
 
     /// `afterword import`: notes from a recording made some other way. There's nothing to stop,
     /// so it goes straight to writing notes.
-    func importRecording(_ file: URL, title: String, participants: [String], template: String) {
+    private func importRecording(_ file: URL, title: String, participants: [String], template: String) {
         // Without a title the CLI would say "Untitled conversation"; the file name says more.
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         let title = trimmedTitle.isEmpty ? file.deletingPathExtension().lastPathComponent : trimmedTitle
@@ -188,6 +215,13 @@ final class Recorder {
         }
         let title = title ?? SessionFolder.title(at: sessionDirectory) ?? "Untitled conversation"
         startRun(arguments, title: title, firstPhase: .writingNotes(progress: "Writing notes again…"), sessionDirectory: sessionDirectory)
+    }
+
+    /// The failure window's Write Notes Again. It only offers that when the recording was saved,
+    /// so without a session folder there's nothing to do.
+    func writeNotesAgain(afterFailureIn sessionDirectory: String?, template: String?) {
+        guard let sessionDirectory else { return }
+        writeNotesAgain(sessionDirectory: sessionDirectory, title: nil, template: template)
     }
 
     /// `--option=value`, never `--option value`: argparse would read a value that starts with a
@@ -256,42 +290,48 @@ final class Recorder {
         phase = .idle
     }
 
-    /// Reacts to the CLI's stdout lines (see run_record, run_import and process_session in
-    /// src/afterword).
+    /// The failure window's OK. The window can outlive its failure (another run may have
+    /// started from the menu since it opened), so this only clears the failure it showed,
+    /// never a newer result.
+    func dismissFailure(details: String, sessionDirectory: String?) {
+        guard phase == .failed(details: details, sessionDirectory: sessionDirectory) else { return }
+        dismissResult()
+    }
+
+    /// The menu's Notes Ready item: opens the note and goes back to the form.
+    func openFinishedNote(_ note: URL) {
+        open(note)
+        dismissResult()
+    }
+
+    /// Reacts to the CLI's stdout lines (see `RunEvent`).
     private func followOutput(of handle: FileHandle, for run: Run) async {
-        for await line in handle.arrivingLines {
-            handleOutputLine(line.trimmingCharacters(in: .whitespaces), from: run)
+        for await line in handle.lines() {
+            handleOutputLine(line, from: run)
         }
         run.openPipes -= 1
     }
 
     private func handleOutputLine(_ line: String, from run: Run) {
-        guard run === self.run, !line.isEmpty else { return }
+        guard run === self.run, let event = RunEvent(line: line) else { return }
 
-        if line.hasPrefix("Session folder: ") {
-            run.sessionDirectory = String(line.dropFirst("Session folder: ".count))
-            return
+        switch event {
+        case .sessionFolder(let path):
+            run.sessionDirectory = path
+        case .savedNote(let note, _):
+            run.savedNote = note
+        case .recordingStarted, .progress:
+            break
         }
-        if line.hasPrefix("Recording.") {
-            // After Stop or Cancel, this line can still be on its way; don't flip back.
-            if run.stopRequest == nil {
-                phase = .recording(since: .now)
-            }
-            return
-        }
-        if line.hasPrefix("Saved ") {
-            run.savedNote = URL(fileURLWithPath: String(line.dropFirst("Saved ".count)))
-        }
-        // Once stopped, every line is progress worth showing ("Transcribing Me…", "Writing notes…").
-        // The CLI can also stop on its own, e.g. if the capture helper fails mid-call.
-        if phase.isWritingNotes || line == "Stopped recording." {
-            phase = .writingNotes(progress: line)
+        let nextPhase = phase.after(event, stopRequested: run.stopRequest != nil, now: .now)
+        if nextPhase != phase {
+            phase = nextPhase
         }
     }
 
     /// Collects stderr, keeping only the end: that's where Python puts the error that matters.
     private func collectErrors(from handle: FileHandle, for run: Run, keeping limit: Int = 12) async {
-        for await line in handle.arrivingLines {
+        for await line in handle.lines() {
             run.errorLines.append(line)
             if run.errorLines.count > limit { run.errorLines.removeFirst() }
         }
@@ -331,27 +371,6 @@ final class Recorder {
             )
         } else {
             lastNotification = Notifier.post(title: "Afterword couldn't finish the notes", body: run.title, noteURL: nil)
-        }
-    }
-
-    // MARK: Recording clock
-
-    /// Ticks once a second while recording, so the menu's elapsed time is current when it opens.
-    private(set) var now = Date.now
-    private var clockTask: Task<Void, Never>?
-
-    private func updateRecordingClock() {
-        guard case .recording = phase else {
-            clockTask?.cancel()
-            clockTask = nil
-            return
-        }
-        guard clockTask == nil else { return }
-        clockTask = Task {
-            while !Task.isCancelled {
-                now = .now
-                try? await Task.sleep(for: .seconds(1))
-            }
         }
     }
 

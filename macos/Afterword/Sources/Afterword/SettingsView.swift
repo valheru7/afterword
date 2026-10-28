@@ -7,10 +7,10 @@ struct SettingsView: View {
     var body: some View {
         Group {
             if model.cli == nil {
-                SetupNeededView { Task { await model.recorder.reload(); await model.load() } }
+                SetupNeededView(onCheckAgain: model.checkForCLIAgain)
                     .padding(20)
             } else if case .failed(let message) = model.loadState {
-                ConfigLoadFailedView(message: message) { Task { await model.load() } }
+                ConfigLoadFailedView(message: message, onRetry: model.retryLoad)
             } else {
                 TabView {
                     GeneralSettings(model: model)
@@ -150,11 +150,11 @@ struct NotesWriterSettings: View {
         Form {
             Section {
                 Picker("Writer", selection: model.choice(\.summarizer.provider, key: "summarizer.provider")) {
-                    Text("Claude API").tag("anthropic")
-                    Text("Claude Code").tag("claude-cli")
-                    Text("Ollama (local)").tag("ollama")
+                    ForEach(NotesWriter.allCases) { writer in
+                        Text(writer.title).tag(writer.rawValue)
+                    }
                 }
-                SettingHint(providerHint)
+                SettingHint(NotesWriter(rawValue: model.draft.summarizer.provider)?.hint ?? "")
                 SettingError(message: model.errors["summarizer.provider"])
             }
             Section {
@@ -165,17 +165,33 @@ struct NotesWriterSettings: View {
         }
         .formStyle(.grouped)
     }
+}
 
-    private var providerHint: LocalizedStringKey {
-        switch model.draft.summarizer.provider {
-        case "anthropic":
+/// The notes writers the CLI knows. The raw values are what `summarizer.provider` stores in
+/// the config, so they can't change; `title` is what the picker shows.
+enum NotesWriter: String, CaseIterable, Identifiable {
+    case anthropic
+    case claudeCLI = "claude-cli"
+    case ollama
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .anthropic: "Claude API"
+        case .claudeCLI: "Claude Code"
+        case .ollama: "Ollama (local)"
+        }
+    }
+
+    var hint: LocalizedStringKey {
+        switch self {
+        case .anthropic:
             "Pay per use with the Claude API. Needs an `ANTHROPIC_API_KEY` or a one-time `ant auth login`."
-        case "claude-cli":
+        case .claudeCLI:
             "Uses Claude Code and your Claude subscription. Claude Code needs to be installed and signed in."
-        case "ollama":
+        case .ollama:
             "Runs on this Mac with Ollama: free and offline. Ollama needs to be running with the model downloaded."
-        default:
-            ""
         }
     }
 }
@@ -306,7 +322,7 @@ struct JoplinSettings: View {
             }
             Section {
                 HStack(alignment: .firstTextBaseline) {
-                    Button("Test Connection") { Task { await model.testJoplin() } }
+                    Button("Test Connection", action: model.testJoplin)
                         .disabled(model.joplinTest == .running)
                     JoplinTestResult(test: model.joplinTest)
                 }

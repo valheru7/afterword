@@ -10,5 +10,10 @@ let package = Package(
             name: "Afterword",
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        .testTarget(
+            name: "AfterwordTests",
+            dependencies: ["Afterword"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
     ]
 )

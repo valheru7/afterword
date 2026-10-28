@@ -38,7 +38,9 @@ struct MenuBarMenu: View {
             stopButton
             Divider()
         case .recording(let since):
-            Text("● Recording \(elapsed(since: since))")
+            // A start time rather than a ticking elapsed time: changing an item while the menu
+            // is open rebuilds it, which moves the highlight off the item under the pointer.
+            Text("● Recording since \(since.formatted(date: .omitted, time: .shortened))")
             stopButton
             Divider()
         case .writingNotes(let progress):
@@ -47,10 +49,7 @@ struct MenuBarMenu: View {
             Divider()
         case .finished(let note):
             if let note {
-                Button("Notes Ready: Open Note") {
-                    recorder.open(note)
-                    recorder.dismissResult()
-                }
+                Button("Notes Ready: Open Note") { recorder.openFinishedNote(note) }
             } else {
                 Text("Notes ready")
             }
@@ -75,36 +74,26 @@ struct MenuBarMenu: View {
             .keyboardShortcut(".")
     }
 
-    /// "12:34", or "1:02:03" past an hour. `recorder.now` ticks while recording.
-    private func elapsed(since start: Date) -> String {
-        let seconds = max(0, recorder.now.timeIntervalSince(start))
-        let pattern: Duration.TimeFormatStyle.Pattern = seconds >= 3600 ? .hourMinuteSecond : .minuteSecond
-        return Duration.seconds(seconds).formatted(.time(pattern: pattern))
-    }
-
     // MARK: Starting something
 
     @ViewBuilder private var startItems: some View {
-        let canStart = recorder.cli != nil && !recorder.phase.isBusy
         Button("New Recording…") {
-            recorder.dismissResult()
             windows.showNewRecording(recorder: recorder)
         }
         .keyboardShortcut("n")
-        .disabled(!canStart)
+        .disabled(!recorder.canStartSession)
         Button("Import Audio…") {
-            recorder.dismissResult()
             windows.showImport(recorder: recorder)
         }
         .keyboardShortcut("i")
-        .disabled(!canStart)
+        .disabled(!recorder.canStartSession)
     }
 
     /// The CLI missing (a build without the bundled tools) or the speech model not downloaded.
     @ViewBuilder private var setupItems: some View {
         if recorder.cli == nil {
             Button("Set Up Afterword…") {
-                windows.showNewRecording(recorder: recorder)  // The form shows the setup steps.
+                windows.showSetup(recorder: recorder)
             }
         } else {
             switch recorder.speechModel {
@@ -139,7 +128,7 @@ struct RecentNotesMenu: View {
                                 recorder.writeNotesAgain(sessionDirectory: sessionDirectory, title: note.title, template: template)
                             }
                         }
-                        .disabled(recorder.cli == nil || recorder.phase.isBusy)
+                        .disabled(!recorder.canStartSession)
                     }
                 }
             }
