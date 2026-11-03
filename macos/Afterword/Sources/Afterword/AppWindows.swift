@@ -24,20 +24,33 @@ final class AppWindows {
         showRecordingForm(recorder: recorder)
     }
 
-    /// Picks the file first, then shows the form for the rest. Like New Recording, it clears
-    /// the last run's result, even if no file is picked.
+    /// Picks a recording or a session folder first, then shows the form for the rest. Like New
+    /// Recording, it clears the last run's result, even if nothing is picked.
     func showImport(recorder: Recorder) {
         recorder.dismissResult()
         NSApplication.shared.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
-        panel.message = "Choose a recording to write notes from."
+        panel.message = "Choose a recording, or an Afterword session folder to write its notes again."
         panel.prompt = "Choose"
-        panel.allowedContentTypes = SessionForm.importableTypes
+        panel.allowedContentTypes = SessionForm.importableTypes + [.folder]
+        panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let file = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        show(title: "Import Audio") {
-            SessionForm(mode: .importFile(file), recorder: recorder, onDone: close)
+        switch ImportSource(picked: url, sessionsDirectory: recorder.config.sessionsDir) {
+        case .audioFile(let file):
+            show(title: "Import Audio") {
+                SessionForm(mode: .importFile(file), recorder: recorder, onDone: close)
+            }
+        case .session(let session):
+            show(title: "Write Notes Again") {
+                ImportSessionView(session: session, recorder: recorder, onDone: close)
+            }
+        case .unusableFolder(let reason):
+            let alert = NSAlert()
+            alert.messageText = "Can't write notes from this folder"
+            alert.informativeText = reason
+            alert.runModal()
         }
     }
 

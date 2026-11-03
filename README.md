@@ -85,7 +85,7 @@ and they'll be included.
 | Command | What it does |
 |---|---|
 | `afterword record` | Record, then write notes when you press Ctrl+C. Add `--mic-only` to record only yourself. |
-| `afterword import FILE` | Write notes from any existing audio or video recording. |
+| `afterword import FILE` | Write notes from any existing audio or video recording. Given a session folder, it does the same as `process`. |
 | `afterword process SESSION_DIR` | Rewrite notes for a session, e.g. with `--template meeting`. Transcripts are reused. |
 | `afterword templates` | List note templates. |
 | `afterword config` | Show (`config show`) or change (`config set KEY VALUE`) settings. See [Configure](#configure). |
@@ -134,7 +134,9 @@ Choose **New Recording…** in its menu, fill in the title, who's on the call an
 template, then start. **Stop Recording** does the same as Ctrl+C. You get a notification when
 the notes are ready. **Import Audio…** writes notes from a recording made some other way, and
 **Recent Notes** opens your notes or writes one again with another template, reusing its
-transcript. **Settings…** edits the same settings as the config file below (folders,
+transcript. To retry a session that never got a note (its notes failed and you closed the
+failure window), choose its folder in `~/Afterword/sessions` with **Import Audio…**: the notes
+are written from its saved Me and Them tracks. **Settings…** edits the same settings as the config file below (folders,
 template, notes writer, Whisper, Joplin and after-note scripts) and saves each change as you
 make it. The first recording asks for Microphone and System Audio Recording permission
 for Afterword instead of your terminal. To start it at login, drag `Afterword.app` into

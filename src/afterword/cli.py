@@ -12,10 +12,12 @@ from afterword.config import Config, config_file, load_config
 from afterword.config_file import ConfigError, check_joplin, effective_config, flattened, set_value
 from afterword.exporters.joplin import JoplinError
 from afterword.pipeline import process_session
-from afterword.session import TYPED_NOTES_FILE, Session, SessionError, Track
+from afterword.session import SESSION_FILE, TYPED_NOTES_FILE, Session, SessionError, Track
 from afterword.summarize import SummaryError
 from afterword.templates import load_templates
 from afterword.transcribe import TranscriptionError, ensure_model, model_path
+
+UNTITLED = "Untitled conversation"
 
 CONSENT_REMINDER = """\
 Before you start: ask everyone if it's OK to record. Many places require everyone's
@@ -32,7 +34,8 @@ Record a call, transcribe it locally, and write notes.
 
 commands:
   record [options]               record a call, then write notes when you press Ctrl+C
-  import FILE [options]          write notes from an existing recording
+  import FILE [options]          write notes from an existing recording, or from a session
+                                 folder (the same as `process`)
   process SESSION_DIR [options]  (re)write notes for a recorded session
   templates                      list note templates
   download-model [--check]       download the Whisper model now instead of on first use
@@ -81,8 +84,11 @@ def main() -> None:
     record.add_argument("--mic-only", action="store_true", help="record only your microphone (if someone declines recording)")
     record.add_argument("--no-process", action="store_true", help="just record; run `afterword process` later")
 
-    import_command = add_command(commands, "import", "write notes from an existing recording")
-    import_command.add_argument("audio", type=Path, metavar="FILE", help="audio or video file of the whole conversation")
+    import_command = add_command(commands, "import", "write notes from an existing recording, or from a session folder")
+    import_command.add_argument(
+        "audio", type=Path, metavar="FILE",
+        help="audio or video file of the whole conversation, or a session folder to write notes for again (the same as `process`)",
+    )
     add_session_arguments(import_command, template_help)
 
     process = add_command(commands, "process", "(re)write notes for a recorded session")
@@ -140,7 +146,7 @@ def add_command(commands: argparse._SubParsersAction, name: str, summary: str) -
 
 
 def add_session_arguments(parser: argparse.ArgumentParser, template_help: str) -> None:
-    parser.add_argument("--title", default="Untitled conversation", help='e.g. "Acme – hiring manager"')
+    parser.add_argument("--title", default=UNTITLED, help='e.g. "Acme – hiring manager"')
     parser.add_argument("--with", dest="participants", action="append", default=[], metavar="NAME",
                         help="someone on the call (repeat for each person)")
     parser.add_argument("--template", metavar="NAME", help=template_help)
@@ -160,12 +166,27 @@ def run_record(arguments: argparse.Namespace, config: Config) -> None:
     if arguments.no_process:
         print(f"Write notes later with: afterword process {session.directory}")
         return
-    process_session(session, config)
+    process_session(session, reload_config(config))
+
+
+def reload_config(startup_config: Config) -> Config:
+    """The config as it is now. A call can last an hour, and the notes writer or exporters
+    may have been changed in Settings meanwhile; the notes should use what's set when they're
+    written, not what was set when recording started."""
+    try:
+        return load_config()
+    except tomllib.TOMLDecodeError as error:
+        # Don't lose the recording's notes over a half-edited file: keep the settings it started with.
+        print(f"afterword: {config_file()} isn't valid TOML ({error}); using the settings from when recording started.")
+        return startup_config
 
 
 def run_import(arguments: argparse.Namespace, config: Config) -> None:
     if not arguments.audio.exists():
         sys.exit(f"afterword: {arguments.audio} doesn't exist")
+    if arguments.audio.is_dir():
+        import_session_folder(arguments, config)
+        return
     session = Session.create(config.sessions_dir, arguments.title, arguments.template or config.template, arguments.participants)
     # Same line as `record` prints, so the macOS app knows where to retry from if this fails.
     print(f"Session folder: {session.directory}", flush=True)
@@ -178,10 +199,33 @@ def run_import(arguments: argparse.Namespace, config: Config) -> None:
     process_session(session, config)
 
 
+def import_session_folder(arguments: argparse.Namespace, config: Config) -> None:
+    """`import` given a session folder does what `process` does, rather than erroring and
+    pointing there: "import" is the word people reach for (it's the macOS app's menu item), and
+    it's clear what they meant. Importing the folder's audio as one mixed recording instead
+    would lose the Me/Them split its separate tracks keep."""
+    if arguments.participants or arguments.title != UNTITLED:
+        print("afterword: --title and --with don't apply to a session folder; it keeps the ones it was recorded with.")
+    # Same line as importing a file prints, so the macOS app knows where to retry from.
+    print(f"Session folder: {arguments.audio}", flush=True)
+    rewrite_notes(arguments.audio, arguments.template, config)
+
+
 def run_process(arguments: argparse.Namespace, config: Config) -> None:
-    session = Session.load(arguments.session)
-    if arguments.template:
-        session.template = arguments.template
+    rewrite_notes(arguments.session, arguments.template, config)
+
+
+def rewrite_notes(session_dir: Path, template: str | None, config: Config) -> None:
+    """Writes a recorded session's notes again, reusing its saved transcripts. `template`
+    replaces the one it was recorded with; None keeps it."""
+    if not (session_dir / SESSION_FILE).is_file():
+        raise SessionError(
+            f"{session_dir} isn't an Afterword session folder: it has no {SESSION_FILE}. "
+            f"Session folders are in {config.sessions_dir}."
+        )
+    session = Session.load(session_dir)
+    if template:
+        session.template = template
         session.save()
     process_session(session, config)
 

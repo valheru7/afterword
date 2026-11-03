@@ -75,24 +75,29 @@ struct NoteHeader {
 /// A session folder the CLI wrote: session.json, the audio tracks and the saved transcript
 /// (see src/afterword/session.py).
 enum SessionFolder {
-    private struct SessionFile: Decodable {
+    /// The parts of session.json the app reads.
+    struct SessionFile: Decodable {
         struct Track: Decodable {}
         let title: String
+        /// The note template it was recorded (or last rewritten) with.
+        let template: String?
         let tracks: [Track]?
+
+        /// Whether `afterword process` can write notes from it: at least one recorded track.
+        /// A recording that failed before capturing anything has none.
+        var hasRecording: Bool { !(tracks ?? []).isEmpty }
     }
 
-    /// Whether `afterword process` can write notes from it: it has a session.json that lists at
-    /// least one recorded track. A recording that failed before capturing anything has none.
     static func hasRecording(at path: String) -> Bool {
-        guard let tracks = sessionFile(at: path)?.tracks else { return false }
-        return !tracks.isEmpty
+        sessionFile(at: path)?.hasRecording ?? false
     }
 
     static func title(at path: String) -> String? {
         sessionFile(at: path)?.title
     }
 
-    private static func sessionFile(at path: String) -> SessionFile? {
+    /// nil when the folder has no session.json, or one that can't be read.
+    static func sessionFile(at path: String) -> SessionFile? {
         let file = URL(fileURLWithPath: path).appendingPathComponent("session.json")
         guard let data = try? Data(contentsOf: file) else { return nil }
         return try? JSONDecoder().decode(SessionFile.self, from: data)

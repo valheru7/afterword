@@ -21,7 +21,11 @@ def summarize_with_claude_cli(request: SummaryRequest, model: str) -> str:
         command += ["--model", model]
     # Run from an empty directory so no project's CLAUDE.md or settings leak into the notes.
     with tempfile.TemporaryDirectory() as empty_dir:
-        result = subprocess.run(command, input=request.user_prompt(), capture_output=True, text=True, cwd=empty_dir)
+        try:
+            result = subprocess.run(command, input=request.user_prompt(), capture_output=True, text=True, cwd=empty_dir)
+        except OSError as error:
+            # Found on PATH but couldn't start, e.g. a script whose interpreter has been removed.
+            raise SummaryError(f"Couldn't run `claude` ({error}).") from error
     if result.returncode != 0:
         raise SummaryError(f"`claude` failed:\n{result.stderr.strip() or result.stdout.strip()}")
 

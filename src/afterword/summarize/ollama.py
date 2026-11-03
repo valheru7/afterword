@@ -32,10 +32,25 @@ def summarize_with_ollama(request: SummaryRequest, model: str) -> str:
     try:
         with urllib.request.urlopen(http_request) as response:
             reply = json.load(response)
+    except urllib.error.HTTPError as error:
+        # Ollama is running but said no, most often "model '…' not found". HTTPError is a
+        # URLError, so this must come first or it would read as "is it running?".
+        raise SummaryError(f"Ollama error {error.code}: {ollama_error_message(error)}") from error
     except urllib.error.URLError as error:
         raise SummaryError(f"Couldn't reach Ollama at {OLLAMA_CHAT_URL}. Is it running? ({error.reason})") from error
+    except OSError as error:
+        # The connection dropped mid-answer, e.g. Ollama ran out of memory on a big model.
+        raise SummaryError(f"Lost the connection to Ollama while it was writing the notes. ({error})") from error
 
     text = reply.get("message", {}).get("content", "").strip()
     if not text:
         raise SummaryError("Ollama returned an empty summary.")
     return text
+
+
+def ollama_error_message(error: urllib.error.HTTPError) -> str:
+    """Ollama explains failures in a JSON body: {"error": "model 'qwen3:14b' not found"}."""
+    try:
+        return json.load(error)["error"]
+    except (ValueError, KeyError, TypeError, OSError):
+        return error.reason
